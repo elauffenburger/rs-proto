@@ -1,0 +1,7 @@
+enum RelationshipType {
+    PARENT = 1;
+    SIBLING = 2;
+    CHILD = 3;
+    ANCESTOR = 4;
+    DESCENDANT = 5;
+}
