@@ -15,7 +15,7 @@ pub struct ProtoOption {
 pub struct Message {
     pub name: String,
     pub options: Vec<ProtoOption>,
-    pub messages: Vec<Message>,
+    pub types: Vec<ProtoType>,
     pub fields: Vec<MessageField>,
 }
 
@@ -24,7 +24,7 @@ impl<'a> Message {
         Message {
             name,
             options: vec![],
-            messages: vec![],
+            types: vec![],
             fields: vec![],
         }
     }
@@ -34,6 +34,7 @@ impl<'a> Message {
 pub enum MessageFieldModifier {
     Required,
     Optional,
+    Repeated,
 }
 
 #[derive(Debug, PartialEq)]
@@ -76,9 +77,21 @@ pub enum ProtoSyntax {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum ProtoImportModifier {
+    Public
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ProtoImport {
+    pub path: String,
+    pub modifier: Option<ProtoImportModifier>,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Program {
     pub syntax: Option<ProtoSyntax>,
     pub package: Option<String>,
+    pub imports: Vec<ProtoImport>,
     pub options: Vec<ProtoOption>,
     pub types: Vec<ProtoType>,
 }
@@ -88,6 +101,7 @@ impl Program {
         Program {
             syntax: None,
             package: None,
+            imports: vec![],
             options: vec![],
             types: vec![],
         }

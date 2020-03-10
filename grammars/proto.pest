@@ -1,11 +1,11 @@
 program = { ((top_level_statement ~ NEWLINE?) | NEWLINE)* }
 top_level_statement = _{ syntax | package | import | option | top_level_definition }
 
-syntax = { "syntax" ~ "\"" ~ identifier ~ "\"" ~ ";" }
+syntax = { "syntax" ~ "=" ~ "\"" ~ identifier ~ "\"" ~ ";" }
 
 package = { "package" ~ path ~ ";" }
 
-import = { "import" ~ import_modifier* ~ "\"" ~ path ~ "\"" ~ ";" }
+import = { "import" ~ import_modifier? ~ "\"" ~ path ~ "\"" ~ ";" }
 import_modifier = { "public" }
 
 option = { "option" ~ option_body ~ ";" }
@@ -29,8 +29,8 @@ message_field_modifier = { "repeated" | "optional" }
 identifier = @{ ((ASCII_ALPHANUMERIC | "_"))+ }
 path = { identifier ~ ("." ~ identifier)* }
 
-numeric = { NUMBER+ }
-string = { "\"" ~ (!("\"") ~ ANY)* ~ "\"" }
+numeric = @{ NUMBER+ }
+string = @{ "\"" ~ (!("\"") ~ ANY)* ~ "\"" }
 boolean = { "true" | "false" }
 constant = { numeric | string | boolean }
 type_identifier = { primitive | identifier }
@@ -38,4 +38,4 @@ primitive = { "int32" | "int64" | "string" | "boolean" | map }
 map = { "map" ~ "<" ~ type_identifier ~ "," ~ type_identifier ~ ">" }
 
 WHITESPACE = _{ " " | "\t" }
-COMMENT = { "//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }

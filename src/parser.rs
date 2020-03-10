@@ -94,13 +94,7 @@ impl ParserImpl {
                     }
                 }
                 Rule::message_def => match Self::parse_message(message_body_part) {
-                    Ok(ProtoType::Message(message)) => result.messages.push(message),
-                    Ok(other_type) => {
-                        return Err(format!(
-                            "Unexpected type returned when parsing inner message: {:?}",
-                            other_type
-                        ));
-                    }
+                    Ok(t) => result.types.push(t),
                     Err(err) => return Err(err),
                 },
                 Rule::message_field => {
@@ -115,8 +109,9 @@ impl ParserImpl {
                                 match field_parts.next().unwrap().as_str() {
                                     "required" => Some(MessageFieldModifier::Required),
                                     "optional" => Some(MessageFieldModifier::Optional),
+                                    "repeated" => Some(MessageFieldModifier::Repeated),
                                     modifier @ _ => {
-                                        return Err(format!("Unkown modiifer {}", modifier));
+                                        return Err(format!("Unkown modifier {}", modifier));
                                     }
                                 }
                             }
@@ -201,6 +196,22 @@ impl ParserImpl {
     fn parse_package(statement: Pair<Rule>) -> Result<String, String> {
         Ok(statement.into_inner().next().unwrap().as_str().to_string())
     }
+
+    fn parse_import(statement: Pair<Rule>) -> Result<ProtoImport, String> {
+        let mut import_parts = statement.into_inner();
+
+        let modifier = match import_parts.peek().unwrap().as_rule() {
+            Rule::import_modifier => match import_parts.next().unwrap().as_str() {
+                "public" => Some(ProtoImportModifier::Public),
+                err @ _ => return Err(format!("Unknown import modifier '{}'", err)),
+            },
+            _ => None,
+        };
+
+        let path = import_parts.next().unwrap().as_str().to_string();
+
+        Ok(ProtoImport { modifier, path })
+    }
 }
 
 impl Parser for ParserImpl {
@@ -223,6 +234,11 @@ impl Parser for ParserImpl {
                             Err(err) => return Err(err),
                         },
 
+                        Rule::import => match Self::parse_import(stmt) {
+                            Ok(i) => prog.imports.push(i),
+                            Err(err) => return Err(err),
+                        },
+
                         Rule::option => {
                             match Self::parse_option_body(stmt.into_inner().next().unwrap()) {
                                 Ok(o) => prog.options.push(o),
@@ -239,7 +255,12 @@ impl Parser for ParserImpl {
                             Ok(m) => prog.types.push(m),
                             Err(err) => return Err(err),
                         },
-                        _ => return Err("Unexpected rule found at top level of file.".to_string()),
+                        err @ _ => {
+                            return Err(format!(
+                                "Unexpected rule '{:?}' found at top level of file.",
+                                err
+                            ));
+                        }
                     }
                 }
 
@@ -263,6 +284,102 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_reference_example() {
+        let program = parse_test!("../test_data/reference_example.proto");
+
+        assert_eq!(
+            program,
+            Program {
+                syntax: Some(ProtoSyntax::Proto3),
+                imports: vec![ProtoImport {
+                    path: "other.proto".to_string(),
+                    modifier: Some(ProtoImportModifier::Public)
+                }],
+                package: None,
+                options: vec![ProtoOption {
+                    name: "java_package".to_string(),
+                    field_path: None,
+                    value: "\"com.example.foo\"".to_string()
+                }],
+                types: vec![
+                    ProtoType::Enum(Enum {
+                        name: "EnumAllowingAlias".to_string(),
+                        options: vec![ProtoOption {
+                            name: "allow_alias".to_string(),
+                            field_path: None,
+                            value: "true".to_string()
+                        }],
+                        values: vec![
+                            EnumValue {
+                                name: "UNKNOWN".to_string(),
+                                options: vec![],
+                                position: 0
+                            },
+                            EnumValue {
+                                name: "STARTED".to_string(),
+                                options: vec![],
+                                position: 1
+                            },
+                            EnumValue {
+                                name: "RUNNING".to_string(),
+                                options: vec![ProtoOption {
+                                    name: "custom_option".to_string(),
+                                    field_path: None,
+                                    value: "\"hello world\"".to_string()
+                                }],
+                                position: 2
+                            },
+                        ]
+                    }),
+                    ProtoType::Message(Message {
+                        name: "outer".to_string(),
+                        options: vec![ProtoOption {
+                            name: "my_option".to_string(),
+                            field_path: Some("a".to_string()),
+                            value: "true".to_string()
+                        }],
+                        types: vec![ProtoType::Message(Message {
+                            name: "inner".to_string(),
+                            options: vec![],
+                            types: vec![],
+                            fields: vec![MessageField {
+                                name: "ival".to_string(),
+                                modifier: None,
+                                field_type: "int64".to_string(),
+                                options: vec![],
+                                position: 1
+                            }]
+                        })],
+                        fields: vec![
+                            MessageField {
+                                name: "inner_message".to_string(),
+                                field_type: "inner".to_string(),
+                                modifier: Some(MessageFieldModifier::Repeated),
+                                options: vec![],
+                                position: 2
+                            },
+                            MessageField {
+                                name: "enum_field".to_string(),
+                                field_type: "EnumAllowingAlias".to_string(),
+                                modifier: None,
+                                options: vec![],
+                                position: 3
+                            },
+                            MessageField {
+                                name: "my_map".to_string(),
+                                field_type: "map<int32, string>".to_string(),
+                                modifier: None,
+                                options: vec![],
+                                position: 4
+                            },
+                        ]
+                    })
+                ],
+            }
+        )
+    }
+
+    #[test]
     fn test_top_level_concepts() {
         let program = parse_test!("../test_data/top_level_concepts.proto");
 
@@ -271,6 +388,7 @@ mod tests {
             Program {
                 syntax: Some(ProtoSyntax::Proto3),
                 package: Some("foo.bar.baz".to_string()),
+                imports: vec![],
                 options: vec![ProtoOption {
                     name: "java_package".to_string(),
                     field_path: None,
@@ -291,11 +409,12 @@ mod tests {
             Program {
                 syntax: None,
                 package: None,
+                imports: vec![],
                 options: vec![],
                 types: vec![ProtoType::Message(Message {
                     name: "Person".to_string(),
                     options: vec![],
-                    messages: vec![],
+                    types: vec![],
                     fields: vec![
                         MessageField {
                             field_type: "string".to_string(),
@@ -334,6 +453,7 @@ mod tests {
             Program {
                 syntax: None,
                 package: None,
+                imports: vec![],
                 options: vec![],
                 types: vec![ProtoType::Enum(Enum {
                     name: "RelationshipType".to_string(),
