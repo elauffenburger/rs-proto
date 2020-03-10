@@ -22,21 +22,69 @@ impl ParserImpl {
         PestProtoParser::parse(Rule::program, prog)
     }
 
+    fn do_parse(parse_root: &mut Pairs<Rule>) -> Result<Program, String> {
+        let mut prog = Program::new();
+
+        let top_level_stmts = parse_root.next().unwrap().into_inner();
+        for stmt in top_level_stmts {
+            match stmt.as_rule() {
+                Rule::syntax => match Self::parse_syntax(stmt) {
+                    Ok(s) => prog.syntax = Some(s),
+                    Err(err) => return Err(err),
+                },
+
+                Rule::package => match Self::parse_package(stmt) {
+                    Ok(p) => prog.package = Some(p),
+                    Err(err) => return Err(err),
+                },
+
+                Rule::import => match Self::parse_import(stmt) {
+                    Ok(i) => prog.imports.push(i),
+                    Err(err) => return Err(err),
+                },
+
+                Rule::option => match Self::parse_option_body(stmt.into_inner().next().unwrap()) {
+                    Ok(o) => prog.options.push(o),
+                    Err(err) => return Err(err),
+                },
+
+                Rule::enum_def => match Self::parse_enum(stmt) {
+                    Ok(e) => prog.types.push(e),
+                    Err(err) => return Err(err),
+                },
+
+                Rule::message_def => match Self::parse_message(stmt) {
+                    Ok(m) => prog.types.push(m),
+                    Err(err) => return Err(err),
+                },
+
+                err @ _ => {
+                    return Err(format!(
+                        "Unexpected rule '{:?}' found at top level of file.",
+                        err
+                    ));
+                }
+            }
+        }
+
+        Ok(prog)
+    }
+
     fn parse_enum<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
         let mut enum_def_parts = statement.into_inner();
 
-        let enum_name = enum_def_parts.next().unwrap().as_str().to_string();
-        let mut result = Enum::new(enum_name);
+        let name = enum_def_parts.next().unwrap().as_str().to_string();
+        let mut result = Enum::new(name);
 
-        let enum_body_parts = enum_def_parts.next().unwrap().into_inner();
-        for pair in enum_body_parts {
-            match pair.as_rule() {
-                Rule::option => match Self::parse_option_body(pair.into_inner().next().unwrap()) {
+        let body_parts = enum_def_parts.next().unwrap().into_inner();
+        for part in body_parts {
+            match part.as_rule() {
+                Rule::option => match Self::parse_option_body(part.into_inner().next().unwrap()) {
                     Ok(option) => result.options.push(option),
                     Err(err) => return Err(err),
                 },
                 Rule::enum_value => {
-                    let mut value_parts = pair.into_inner();
+                    let mut value_parts = part.into_inner();
                     let name = value_parts.next().unwrap().as_str().to_string();
                     let position = value_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
@@ -77,46 +125,35 @@ impl ParserImpl {
     fn parse_message<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
         let mut message_def_parts = statement.into_inner();
 
-        let message_name = message_def_parts.next().unwrap();
-        let name = message_name.as_str().to_string();
-
+        let name = message_def_parts.next().unwrap().as_str().to_string();
         let mut result = Message::new(name);
 
-        let message_body = message_def_parts.next().unwrap();
+        let body = message_def_parts.next().unwrap();
 
-        let message_body_parts = message_body.into_inner();
-        for message_body_part in message_body_parts {
-            match message_body_part.as_rule() {
-                Rule::option => {
-                    match Self::parse_option_body(message_body_part.into_inner().next().unwrap()) {
-                        Ok(option) => result.options.push(option),
-                        Err(err) => return Err(err),
-                    }
-                }
-                Rule::message_def => match Self::parse_message(message_body_part) {
+        let body_parts = body.into_inner();
+        for part in body_parts {
+            match part.as_rule() {
+                Rule::option => match Self::parse_option_body(part.into_inner().next().unwrap()) {
+                    Ok(option) => result.options.push(option),
+                    Err(err) => return Err(err),
+                },
+                Rule::message_def => match Self::parse_message(part) {
                     Ok(t) => result.types.push(t),
                     Err(err) => return Err(err),
                 },
                 Rule::message_field => {
-                    let field = message_body_part;
-                    let mut field_parts = field.into_inner();
+                    let mut field_parts = part.into_inner();
 
-                    let modifier = {
-                        let next_pair = field_parts.peek().unwrap();
-
-                        match next_pair.as_rule() {
-                            Rule::message_field_modifier => {
-                                match field_parts.next().unwrap().as_str() {
-                                    "required" => Some(MessageFieldModifier::Required),
-                                    "optional" => Some(MessageFieldModifier::Optional),
-                                    "repeated" => Some(MessageFieldModifier::Repeated),
-                                    modifier @ _ => {
-                                        return Err(format!("Unkown modifier {}", modifier));
-                                    }
-                                }
+                    let modifier = match field_parts.peek().unwrap().as_rule() {
+                        Rule::message_field_modifier => {
+                            match field_parts.next().unwrap().as_str() {
+                                "required" => Some(MessageFieldModifier::Required),
+                                "optional" => Some(MessageFieldModifier::Optional),
+                                "repeated" => Some(MessageFieldModifier::Repeated),
+                                modifier @ _ => return Err(format!("Unkown modifier {}", modifier)),
                             }
-                            _ => None,
                         }
+                        _ => None,
                     };
 
                     let field_type = field_parts.next().unwrap().as_str().to_string();
@@ -218,54 +255,7 @@ impl Parser for ParserImpl {
     fn parse<'a>(&self, input: &'a str) -> Result<Program, String> {
         match Self::parse_pest(input) {
             Err(err) => Err(format!("{}", err)),
-            Ok(mut parse_root) => {
-                let mut prog = Program::new();
-
-                let top_level_stmts = parse_root.next().unwrap().into_inner();
-                for stmt in top_level_stmts {
-                    match stmt.as_rule() {
-                        Rule::syntax => match Self::parse_syntax(stmt) {
-                            Ok(s) => prog.syntax = Some(s),
-                            Err(err) => return Err(err),
-                        },
-
-                        Rule::package => match Self::parse_package(stmt) {
-                            Ok(p) => prog.package = Some(p),
-                            Err(err) => return Err(err),
-                        },
-
-                        Rule::import => match Self::parse_import(stmt) {
-                            Ok(i) => prog.imports.push(i),
-                            Err(err) => return Err(err),
-                        },
-
-                        Rule::option => {
-                            match Self::parse_option_body(stmt.into_inner().next().unwrap()) {
-                                Ok(o) => prog.options.push(o),
-                                Err(err) => return Err(err),
-                            }
-                        }
-
-                        Rule::enum_def => match Self::parse_enum(stmt) {
-                            Ok(e) => prog.types.push(e),
-                            Err(err) => return Err(err),
-                        },
-
-                        Rule::message_def => match Self::parse_message(stmt) {
-                            Ok(m) => prog.types.push(m),
-                            Err(err) => return Err(err),
-                        },
-                        err @ _ => {
-                            return Err(format!(
-                                "Unexpected rule '{:?}' found at top level of file.",
-                                err
-                            ));
-                        }
-                    }
-                }
-
-                Ok(prog)
-            }
+            Ok(mut parse_root) => Self::do_parse(&mut parse_root),
         }
     }
 }
