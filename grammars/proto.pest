@@ -18,13 +18,13 @@ top_level_definition = _{ enum_def | message_def }
 
 enum_def = { "enum" ~ enum_name ~ "{" ~ NEWLINE? ~ enum_body ~ NEWLINE? ~ "}" }
 enum_name = { identifier }
-enum_body = { ((option | enum_field) ~ NEWLINE?)* }
-enum_field = { identifier ~ "=" ~ numeric ~ field_option* ~ ";" }
+enum_body = { ((option | enum_value) ~ NEWLINE?)* }
+enum_value = { identifier ~ "=" ~ numeric ~ field_option* ~ ";" }
 
 message_def = { "message" ~ message_name ~ "{" ~ NEWLINE? ~ message_body ~ NEWLINE? ~ "}" }
 message_name = { identifier }
 message_body = { (((option | message_def | message_field) ~ NEWLINE?) | NEWLINE)* }
-message_field = { message_field_modifier? ~ type_identifier ~ identifier ~ "=" ~ numeric ~ ";" }
+message_field = { message_field_modifier? ~ type_identifier ~ identifier ~ "=" ~ numeric ~ field_option* ~ ";" }
 message_field_modifier = { "repeated" | "optional" }
 
 identifier = @{ ((ASCII_ALPHANUMERIC | "_"))+ }

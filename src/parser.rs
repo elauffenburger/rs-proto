@@ -23,12 +23,58 @@ impl ParserImpl {
     }
 
     fn parse_enum<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
-        Err("not implemented".to_string())
+        let mut enum_def_parts = statement.into_inner();
+
+        let enum_name = enum_def_parts.next().unwrap().as_str().to_string();
+        let mut result = Enum::new(enum_name);
+
+        let enum_body_parts = enum_def_parts.next().unwrap().into_inner();
+        for pair in enum_body_parts {
+            match pair.as_rule() {
+                Rule::option => match Self::parse_option(pair.into_inner().next().unwrap()) {
+                    Ok(option) => result.options.push(option),
+                    Err(err) => return Err(err),
+                },
+                Rule::enum_value => {
+                    let mut value_parts = pair.into_inner();
+                    let name = value_parts.next().unwrap().as_str().to_string();
+                    let position = value_parts.next().unwrap().as_str().parse::<u32>().unwrap();
+
+                    let mut options = vec![];
+                    for next in value_parts {
+                        match next.as_rule() {
+                            Rule::field_option => match Self::parse_field_option(next) {
+                                Ok(option) => options.push(option),
+                                Err(err) => return Err(err),
+                            },
+                            err @ _ => {
+                                return Err(format!(
+                                    "Unknown token encountered while parsing enum options: {:?}",
+                                    err
+                                ));
+                            }
+                        }
+                    }
+
+                    result.values.push(EnumValue {
+                        name,
+                        position,
+                        options,
+                    })
+                }
+                err @ _ => {
+                    return Err(format!(
+                        "Unexpected rule found when parsing enum body: {:?}",
+                        err
+                    ));
+                }
+            }
+        }
+
+        Ok(ProtoType::Enum(result))
     }
 
     fn parse_message<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
-        assert_eq!(statement.as_rule(), Rule::message_def);
-
         let mut message_def_parts = statement.into_inner();
 
         let message_name = message_def_parts.next().unwrap();
@@ -41,6 +87,22 @@ impl ParserImpl {
         let message_body_parts = message_body.into_inner();
         for message_body_part in message_body_parts {
             match message_body_part.as_rule() {
+                Rule::option => {
+                    match Self::parse_option(message_body_part.into_inner().next().unwrap()) {
+                        Ok(option) => result.options.push(option),
+                        Err(err) => return Err(err),
+                    }
+                }
+                Rule::message_def => match Self::parse_message(message_body_part) {
+                    Ok(ProtoType::Message(message)) => result.messages.push(message),
+                    Ok(other_type) => {
+                        return Err(format!(
+                            "Unexpected type returned when parsing inner message: {:?}",
+                            other_type
+                        ));
+                    }
+                    Err(err) => return Err(err),
+                },
                 Rule::message_field => {
                     let field = message_body_part;
                     let mut field_parts = field.into_inner();
@@ -66,26 +128,22 @@ impl ParserImpl {
                     let name = field_parts.next().unwrap().as_str().to_string();
                     let position = field_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
-                    let option = {
-                        let maybe_next_pair = field_parts.peek();
-
-                        match maybe_next_pair {
-                            Some(next_pair) => match next_pair.as_rule() {
-                                Rule::field_option => match Self::parse_field_option(next_pair) {
-                                    Ok(option) => Some(option),
-                                    Err(err) => return Err(err),
-                                },
-                                _ => None,
+                    let mut options = vec![];
+                    for next in field_parts {
+                        match next.as_rule() {
+                            Rule::field_option => match Self::parse_field_option(next) {
+                                Ok(option) => options.push(option),
+                                Err(err) => return Err(err),
                             },
-                            None => None,
+                            _ => {}
                         }
-                    };
+                    }
 
                     result.fields.push(MessageField {
                         modifier,
                         name,
                         field_type,
-                        option,
+                        options,
                         position,
                     })
                 }
@@ -192,26 +250,28 @@ mod tests {
             Program {
                 types: vec![ProtoType::Message(Message {
                     name: "Person".to_string(),
+                    options: vec![],
+                    messages: vec![],
                     fields: vec![
                         MessageField {
                             field_type: "string".to_string(),
                             name: "first_name".to_string(),
                             modifier: None,
-                            option: None,
+                            options: vec![],
                             position: 1
                         },
                         MessageField {
                             field_type: "string".to_string(),
                             name: "last_name".to_string(),
                             modifier: None,
-                            option: None,
+                            options: vec![],
                             position: 2
                         },
                         MessageField {
                             field_type: "int64".to_string(),
                             name: "date_of_birth_unix_epoch".to_string(),
                             modifier: None,
-                            option: None,
+                            options: vec![],
                             position: 3
                         }
                     ]
@@ -230,11 +290,32 @@ mod tests {
             Program {
                 types: vec![ProtoType::Enum(Enum {
                     name: "RelationshipType".to_string(),
+                    options: vec![],
                     values: vec![
                         EnumValue {
                             name: "PARENT".to_string(),
-                            option: None,
-                            position: 1 
+                            options: vec![],
+                            position: 1
+                        },
+                        EnumValue {
+                            name: "SIBLING".to_string(),
+                            options: vec![],
+                            position: 2
+                        },
+                        EnumValue {
+                            name: "CHILD".to_string(),
+                            options: vec![],
+                            position: 3
+                        },
+                        EnumValue {
+                            name: "ANCESTOR".to_string(),
+                            options: vec![],
+                            position: 4
+                        },
+                        EnumValue {
+                            name: "DESCENDANT".to_string(),
+                            options: vec![],
+                            position: 5
                         },
                     ]
                 })]
@@ -266,7 +347,7 @@ mod tests {
                 modifier: None,
                 field_type: "string".to_string(),
                 name: "first_name".to_string(),
-                option: None,
+                options: vec![],
                 position: 1,
             },
         );
@@ -277,7 +358,7 @@ mod tests {
                 modifier: None,
                 field_type: "string".to_string(),
                 name: "last_name".to_string(),
-                option: None,
+                options: vec![],
                 position: 2,
             },
         );
@@ -288,7 +369,7 @@ mod tests {
                 modifier: None,
                 field_type: "int64".to_string(),
                 name: "date_of_birth_unix_epoch".to_string(),
-                option: None,
+                options: vec![],
                 position: 3,
             },
         );
