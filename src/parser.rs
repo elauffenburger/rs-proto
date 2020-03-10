@@ -28,36 +28,12 @@ impl ParserImpl {
         let top_level_stmts = parse_root.next().unwrap().into_inner();
         for stmt in top_level_stmts {
             match stmt.as_rule() {
-                Rule::syntax => match Self::parse_syntax(stmt) {
-                    Ok(s) => prog.syntax = Some(s),
-                    Err(err) => return Err(err),
-                },
-
-                Rule::package => match Self::parse_package(stmt) {
-                    Ok(p) => prog.package = Some(p),
-                    Err(err) => return Err(err),
-                },
-
-                Rule::import => match Self::parse_import(stmt) {
-                    Ok(i) => prog.imports.push(i),
-                    Err(err) => return Err(err),
-                },
-
-                Rule::option => match Self::parse_option(stmt) {
-                    Ok(o) => prog.options.push(o),
-                    Err(err) => return Err(err),
-                },
-
-                Rule::enum_def => match Self::parse_enum(stmt) {
-                    Ok(e) => prog.types.push(e),
-                    Err(err) => return Err(err),
-                },
-
-                Rule::message_def => match Self::parse_message(stmt) {
-                    Ok(m) => prog.types.push(m),
-                    Err(err) => return Err(err),
-                },
-
+                Rule::syntax => prog.syntax = Some(Self::parse_syntax(stmt)?),
+                Rule::package => prog.package = Some(Self::parse_package(stmt)?),
+                Rule::import => prog.imports.push(Self::parse_import(stmt)?),
+                Rule::option => prog.options.push(Self::parse_option(stmt)?),
+                Rule::enum_def => prog.types.push(Self::parse_enum(stmt)?),
+                Rule::message_def => prog.types.push(Self::parse_message(stmt)?),
                 err @ _ => {
                     return Err(format!(
                         "Unexpected rule '{:?}' found at top level of file.",
@@ -79,14 +55,8 @@ impl ParserImpl {
         let body_parts = enum_def_parts.next().unwrap().into_inner();
         for part in body_parts {
             match part.as_rule() {
-                Rule::option => match Self::parse_option(part) {
-                    Ok(option) => result.options.push(option),
-                    Err(err) => return Err(err),
-                },
-                Rule::enum_value => match Self::parse_enum_value(part) {
-                    Ok(value) => result.values.push(value),
-                    Err(err) => return Err(err),
-                },
+                Rule::option => result.options.push(Self::parse_option(part)?),
+                Rule::enum_value => result.values.push(Self::parse_enum_value(part)?),
                 err @ _ => {
                     return Err(format!(
                         "Unexpected rule found when parsing enum body: {:?}",
@@ -104,10 +74,7 @@ impl ParserImpl {
         let name = value_parts.next().unwrap().as_str().to_string();
         let position = value_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
-        let options = match Self::parse_field_options(&mut value_parts) {
-            Ok(opts) => opts,
-            Err(err) => return Err(err),
-        };
+        let options = Self::parse_field_options(&mut value_parts)?;
 
         Ok(EnumValue {
             name,
@@ -127,18 +94,9 @@ impl ParserImpl {
         let body_parts = body.into_inner();
         for part in body_parts {
             match part.as_rule() {
-                Rule::option => match Self::parse_option_body(part.into_inner().next().unwrap()) {
-                    Ok(option) => result.options.push(option),
-                    Err(err) => return Err(err),
-                },
-                Rule::message_def => match Self::parse_message(part) {
-                    Ok(t) => result.types.push(t),
-                    Err(err) => return Err(err),
-                },
-                Rule::message_field => match Self::parse_message_field(part) {
-                    Ok(f) => result.fields.push(f),
-                    Err(err) => return Err(err),
-                },
+                Rule::option => result.options.push(Self::parse_option(part)?),
+                Rule::message_def => result.types.push(Self::parse_message(part)?),
+                Rule::message_field => result.fields.push(Self::parse_message_field(part)?),
                 err @ _ => {
                     return Err(format!(
                         "Unexpected rule {:?} when parsing message body",
@@ -191,10 +149,7 @@ impl ParserImpl {
         let mut options = vec![];
         for next in next_pairs {
             match next.as_rule() {
-                Rule::field_option => match Self::parse_field_option(next) {
-                    Ok(option) => options.push(option),
-                    Err(err) => return Err(err),
-                },
+                Rule::field_option => options.push(Self::parse_field_option(next)?),
                 err @ _ => {
                     return Err(format!(
                         "Unknown token encountered while parsing field options: {:?}",
@@ -218,13 +173,13 @@ impl ParserImpl {
 
         let name = option_identifier_pairs.next().unwrap().as_str().to_string();
         let field_path = match option_identifier_pairs.peek() {
-            None => None,
             Some(_) => Some(
                 option_identifier_pairs
                     .map(|pair| pair.as_str())
                     .collect::<Vec<&str>>()
                     .join("."),
             ),
+            None => None,
         };
 
         let value = option_body_inner.next().unwrap().as_str().to_string();
