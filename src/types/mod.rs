@@ -70,12 +70,26 @@ pub struct EnumValue {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum ProtoSyntax {
+    Proto2,
+    Proto3,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Program {
+    pub syntax: Option<ProtoSyntax>,
+    pub package: Option<String>,
+    pub options: Vec<ProtoOption>,
     pub types: Vec<ProtoType>,
 }
 
 impl Program {
     pub fn new() -> Program {
-        Program { types: vec![] }
+        Program {
+            syntax: None,
+            package: None,
+            options: vec![],
+            types: vec![],
+        }
     }
 }

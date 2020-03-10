@@ -1,8 +1,7 @@
 program = { ((top_level_statement ~ NEWLINE?) | NEWLINE)* }
 top_level_statement = _{ syntax | package | import | option | top_level_definition }
 
-syntax = { "syntax" ~ "=" ~ "\"" ~ proto_version ~ "\"" ~ ";" }
-proto_version = { "proto2" | "proto3" }
+syntax = { "syntax" ~ "\"" ~ identifier ~ "\"" ~ ";" }
 
 package = { "package" ~ path ~ ";" }
 
@@ -12,7 +11,7 @@ import_modifier = { "public" }
 option = { "option" ~ option_body ~ ";" }
 field_option = { "[" ~ option_body ~ "]" }
 option_body = { option_identifier ~ "=" ~ constant }
-option_identifier = _{ (identifier | "(" ~ identifier ~ ")") ~ ("." ~ identifier)* }
+option_identifier = { (identifier | "(" ~ identifier ~ ")") ~ ("." ~ identifier)* }
 
 top_level_definition = _{ enum_def | message_def }
 

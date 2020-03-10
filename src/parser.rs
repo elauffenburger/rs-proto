@@ -31,7 +31,7 @@ impl ParserImpl {
         let enum_body_parts = enum_def_parts.next().unwrap().into_inner();
         for pair in enum_body_parts {
             match pair.as_rule() {
-                Rule::option => match Self::parse_option(pair.into_inner().next().unwrap()) {
+                Rule::option => match Self::parse_option_body(pair.into_inner().next().unwrap()) {
                     Ok(option) => result.options.push(option),
                     Err(err) => return Err(err),
                 },
@@ -88,7 +88,7 @@ impl ParserImpl {
         for message_body_part in message_body_parts {
             match message_body_part.as_rule() {
                 Rule::option => {
-                    match Self::parse_option(message_body_part.into_inner().next().unwrap()) {
+                    match Self::parse_option_body(message_body_part.into_inner().next().unwrap()) {
                         Ok(option) => result.options.push(option),
                         Err(err) => return Err(err),
                     }
@@ -163,10 +163,10 @@ impl ParserImpl {
         assert_eq!(option.as_rule(), Rule::field_option);
 
         let option_body_pair = option.into_inner().next().unwrap();
-        Self::parse_option(option_body_pair)
+        Self::parse_option_body(option_body_pair)
     }
 
-    fn parse_option(option_body_pair: Pair<Rule>) -> Result<ProtoOption, String> {
+    fn parse_option_body(option_body_pair: Pair<Rule>) -> Result<ProtoOption, String> {
         let mut option_body_inner = option_body_pair.into_inner();
         let mut option_identifier_pairs = option_body_inner.next().unwrap().into_inner();
 
@@ -189,6 +189,18 @@ impl ParserImpl {
             value,
         })
     }
+
+    fn parse_syntax(statement: Pair<Rule>) -> Result<ProtoSyntax, String> {
+        match statement.into_inner().next().unwrap().as_str() {
+            "proto2" => Ok(ProtoSyntax::Proto2),
+            "proto3" => Ok(ProtoSyntax::Proto3),
+            syntax @ _ => Err(format!("Unknown proto syntax '{}'", syntax)),
+        }
+    }
+
+    fn parse_package(statement: Pair<Rule>) -> Result<String, String> {
+        Ok(statement.into_inner().next().unwrap().as_str().to_string())
+    }
 }
 
 impl Parser for ParserImpl {
@@ -201,6 +213,23 @@ impl Parser for ParserImpl {
                 let top_level_stmts = parse_root.next().unwrap().into_inner();
                 for stmt in top_level_stmts {
                     match stmt.as_rule() {
+                        Rule::syntax => match Self::parse_syntax(stmt) {
+                            Ok(s) => prog.syntax = Some(s),
+                            Err(err) => return Err(err),
+                        },
+
+                        Rule::package => match Self::parse_package(stmt) {
+                            Ok(p) => prog.package = Some(p),
+                            Err(err) => return Err(err),
+                        },
+
+                        Rule::option => {
+                            match Self::parse_option_body(stmt.into_inner().next().unwrap()) {
+                                Ok(o) => prog.options.push(o),
+                                Err(err) => return Err(err),
+                            }
+                        }
+
                         Rule::enum_def => match Self::parse_enum(stmt) {
                             Ok(e) => prog.types.push(e),
                             Err(err) => return Err(err),
@@ -222,13 +251,6 @@ impl Parser for ParserImpl {
 
 #[cfg(test)]
 mod tests {
-    macro_rules! parse_test_raw {
-        ($test_path: expr) => {{
-            ParserImpl::parse_pest(include_str!($test_path))
-                .expect(&format!("failed to parse {}", $test_path))
-        }};
-    }
-
     macro_rules! parse_test {
         ($test_path: expr) => {{
             let parser = ParserImpl::new();
@@ -241,6 +263,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_top_level_concepts() {
+        let program = parse_test!("../test_data/top_level_concepts.proto");
+
+        assert_eq!(
+            program,
+            Program {
+                syntax: Some(ProtoSyntax::Proto3),
+                package: Some("foo.bar.baz".to_string()),
+                options: vec![ProtoOption {
+                    name: "java_package".to_string(),
+                    field_path: None,
+                    value: "\"com.rsproto.toplevelconcepts\"".to_string()
+                }],
+                types: vec![],
+            }
+        )
+    }
+
+    #[test]
     fn test_message() {
         let program = parse_test!("../test_data/message.proto");
 
@@ -248,6 +289,9 @@ mod tests {
         assert_eq!(
             program,
             Program {
+                syntax: None,
+                package: None,
+                options: vec![],
                 types: vec![ProtoType::Message(Message {
                     name: "Person".to_string(),
                     options: vec![],
@@ -288,6 +332,9 @@ mod tests {
         assert_eq!(
             program,
             Program {
+                syntax: None,
+                package: None,
+                options: vec![],
                 types: vec![ProtoType::Enum(Enum {
                     name: "RelationshipType".to_string(),
                     options: vec![],
@@ -320,116 +367,6 @@ mod tests {
                     ]
                 })]
             }
-        );
-    }
-
-    #[test]
-    fn test_message_raw() {
-        let root = parse_test_raw!("../test_data/message.proto");
-
-        let program = root.peek().unwrap();
-        assert_eq!(program.as_rule(), Rule::program);
-
-        let message = program.into_inner().peek().unwrap();
-        assert_eq!(message.as_rule(), Rule::message_def);
-
-        let mut message_pairs = message.into_inner();
-
-        let message_name = message_pairs.nth(0).unwrap();
-        assert_eq!(message_name.as_str(), "Person");
-
-        let message_body = message_pairs.nth(0).unwrap();
-        let mut message_fields = message_body.into_inner();
-
-        assert_message_field_raw(
-            message_fields.nth(0).unwrap(),
-            MessageField {
-                modifier: None,
-                field_type: "string".to_string(),
-                name: "first_name".to_string(),
-                options: vec![],
-                position: 1,
-            },
-        );
-
-        assert_message_field_raw(
-            message_fields.nth(0).unwrap(),
-            MessageField {
-                modifier: None,
-                field_type: "string".to_string(),
-                name: "last_name".to_string(),
-                options: vec![],
-                position: 2,
-            },
-        );
-
-        assert_message_field_raw(
-            message_fields.nth(0).unwrap(),
-            MessageField {
-                modifier: None,
-                field_type: "int64".to_string(),
-                name: "date_of_birth_unix_epoch".to_string(),
-                options: vec![],
-                position: 3,
-            },
-        );
-    }
-
-    #[test]
-    fn test_enum_raw() {
-        let prog = parse_test_raw!("../test_data/enum.proto");
-
-        let mut definitions = prog.peek().unwrap().into_inner().collect::<Vec<_>>();
-        assert_eq!(definitions.len(), 1);
-
-        let enum_def = definitions.remove(0);
-        assert_eq!(enum_def.as_rule(), Rule::enum_def);
-
-        let mut enum_def_parts = enum_def.into_inner().collect::<Vec<_>>();
-
-        let enum_name = enum_def_parts.remove(0);
-        assert_eq!(enum_name.as_rule(), Rule::enum_name);
-        assert_eq!(enum_name.as_str(), "RelationshipType");
-
-        let enum_body = enum_def_parts.remove(0);
-        assert_eq!(enum_body.as_rule(), Rule::enum_body);
-
-        let enum_body_parts = enum_body.into_inner().collect::<Vec<_>>();
-    }
-
-    fn assert_message_field_raw<'a>(field: Pair<'a, Rule>, assertion: MessageField) {
-        let mut field_parts = field.into_inner();
-
-        match &assertion.modifier {
-            Some(modifier) => {
-                let maybe_modifier = field_parts.nth(0).unwrap();
-
-                assert_eq!(maybe_modifier.as_rule(), Rule::message_field_modifier);
-                assert_eq!(
-                    maybe_modifier.as_str(),
-                    match modifier {
-                        MessageFieldModifier::Optional => "optional",
-                        MessageFieldModifier::Required => "required",
-                    }
-                );
-            }
-            None => assert!(field_parts.peek().unwrap().as_rule() == Rule::type_identifier),
-        }
-
-        let field_type = field_parts.nth(0).unwrap();
-        let name = field_parts.nth(0).unwrap();
-        let position = field_parts.nth(0).unwrap();
-
-        assert_eq!(&field_type.as_rule(), &Rule::type_identifier);
-        assert_eq!(&field_type.as_str(), &assertion.field_type);
-
-        assert_eq!(&name.as_rule(), &Rule::identifier);
-        assert_eq!(&name.as_str(), &assertion.name);
-
-        assert_eq!(&position.as_rule(), &Rule::numeric);
-        assert_eq!(
-            position.as_str().parse::<u32>().unwrap(),
-            assertion.position
         );
     }
 }
