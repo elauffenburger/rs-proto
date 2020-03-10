@@ -1,7 +1,7 @@
 #[derive(Debug, PartialEq)]
-pub enum Type<'a> {
+pub enum ProtoType {
     Message(Message),
-    Enum(Enum<'a>),
+    Enum(Enum),
 }
 
 #[derive(Debug, PartialEq)]
@@ -17,7 +17,7 @@ pub struct Message {
     pub fields: Vec<MessageField>,
 }
 
-impl Message {
+impl<'a> Message {
     pub fn new(name: String) -> Self {
         Message { name, fields: vec![] }
     }
@@ -39,25 +39,25 @@ pub struct MessageField {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Enum<'a> {
-    pub name: &'a str,
-    pub values: Vec<EnumField<'a>>,
+pub struct Enum {
+    pub name: String,
+    pub values: Vec<EnumValue>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct EnumField<'a> {
-    pub name: &'a str,
+pub struct EnumValue {
+    pub name: String,
     pub option: Option<ProtoOption>,
     pub position: u32,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Program<'a> {
-    pub types: Vec<Type<'a>>,
+pub struct Program {
+    pub types: Vec<ProtoType>,
 }
 
-impl<'a> Program<'a> {
-    pub fn new() -> Program<'a> {
+impl Program {
+    pub fn new() -> Program {
         Program { types: vec![] }
     }
 }

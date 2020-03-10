@@ -8,7 +8,7 @@ use pest::Parser as PestParser;
 struct PestProtoParser;
 
 pub trait Parser {
-    fn parse<'a, 'b>(&self, input: &'a str) -> Result<Program<'b>, String>;
+    fn parse<'a>(&self, input: &'a str) -> Result<Program, String>;
 }
 
 pub struct ParserImpl {}
@@ -22,11 +22,11 @@ impl ParserImpl {
         PestProtoParser::parse(Rule::program, prog)
     }
 
-    fn parse_enum<'a, 'b>(statement: Pair<'a, Rule>) -> Result<Type<'b>, String> {
+    fn parse_enum<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
         Err("not implemented".to_string())
     }
 
-    fn parse_message<'a, 'b>(statement: Pair<'a, Rule>) -> Result<Type<'b>, String> {
+    fn parse_message<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
         assert_eq!(statement.as_rule(), Rule::message_def);
 
         let mut message_def_parts = statement.into_inner();
@@ -98,7 +98,7 @@ impl ParserImpl {
             }
         }
 
-        Ok(Type::Message(result))
+        Ok(ProtoType::Message(result))
     }
 
     fn parse_field_option(option: Pair<Rule>) -> Result<ProtoOption, String> {
@@ -134,7 +134,7 @@ impl ParserImpl {
 }
 
 impl Parser for ParserImpl {
-    fn parse<'a, 'b>(&self, input: &'a str) -> Result<Program<'b>, String> {
+    fn parse<'a>(&self, input: &'a str) -> Result<Program, String> {
         match Self::parse_pest(input) {
             Err(err) => Err(format!("{}", err)),
             Ok(mut parse_root) => {
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(
             program,
             Program {
-                types: vec![Type::Message(Message {
+                types: vec![ProtoType::Message(Message {
                     name: "Person".to_string(),
                     fields: vec![
                         MessageField {
@@ -228,11 +228,11 @@ mod tests {
         assert_eq!(
             program,
             Program {
-                types: vec![Type::Enum(Enum {
-                    name: "RelationshipType",
+                types: vec![ProtoType::Enum(Enum {
+                    name: "RelationshipType".to_string(),
                     values: vec![
-                        EnumField {
-                            name: "PARENT",
+                        EnumValue {
+                            name: "PARENT".to_string(),
                             option: None,
                             position: 1 
                         },
