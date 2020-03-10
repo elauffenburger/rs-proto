@@ -29,16 +29,14 @@ impl ParserImpl {
     fn parse_message<'a, 'b>(statement: Pair<'a, Rule>) -> Result<Type<'b>, String> {
         assert_eq!(statement.as_rule(), Rule::message_def);
 
-        let mut result = Message::new();
-
-        let mut fields = vec![];
-
         let mut message_def_parts = statement.into_inner();
 
-        let message_name = message_def_parts.nth(0).unwrap();
-        result.name = message_name.as_str().to_string();
+        let message_name = message_def_parts.next().unwrap();
+        let name = message_name.as_str().to_string();
 
-        let message_body = message_def_parts.nth(0).unwrap();
+        let mut result = Message::new(name);
+
+        let message_body = message_def_parts.next().unwrap();
 
         let message_body_parts = message_body.into_inner();
         for message_body_part in message_body_parts {
@@ -52,7 +50,7 @@ impl ParserImpl {
 
                         match next_pair.as_rule() {
                             Rule::message_field_modifier => {
-                                match field_parts.nth(0).unwrap().as_str() {
+                                match field_parts.next().unwrap().as_str() {
                                     "required" => Some(MessageFieldModifier::Required),
                                     "optional" => Some(MessageFieldModifier::Optional),
                                     modifier @ _ => {
@@ -64,15 +62,31 @@ impl ParserImpl {
                         }
                     };
 
-                    let field_type = field_parts.nth(0).unwrap();
-                    let name = field_parts.nth(0).unwrap();
-                    let position = field_parts.nth(0).unwrap();
+                    let field_type = field_parts.next().unwrap().as_str().to_string();
+                    let name = field_parts.next().unwrap().as_str().to_string();
+                    let position = field_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
-                    fields.push(MessageField {
+                    let option = {
+                        let maybe_next_pair = field_parts.peek();
+
+                        match maybe_next_pair {
+                            Some(next_pair) => match next_pair.as_rule() {
+                                Rule::field_option => match Self::parse_field_option(next_pair) {
+                                    Ok(option) => Some(option),
+                                    Err(err) => return Err(err),
+                                },
+                                _ => None,
+                            },
+                            None => None,
+                        }
+                    };
+
+                    result.fields.push(MessageField {
                         modifier,
-                        name: name.as_str(),
-                        field_type: field_type.as_str(),
-                        position: position.as_str().parse::<u32>().unwrap(),
+                        name,
+                        field_type,
+                        option,
+                        position,
                     })
                 }
                 err @ _ => {
@@ -85,7 +99,37 @@ impl ParserImpl {
         }
 
         Ok(Type::Message(result))
+    }
 
+    fn parse_field_option(option: Pair<Rule>) -> Result<ProtoOption, String> {
+        assert_eq!(option.as_rule(), Rule::field_option);
+
+        let option_body_pair = option.into_inner().next().unwrap();
+        Self::parse_option(option_body_pair)
+    }
+
+    fn parse_option(option_body_pair: Pair<Rule>) -> Result<ProtoOption, String> {
+        let mut option_body_inner = option_body_pair.into_inner();
+        let mut option_identifier_pairs = option_body_inner.next().unwrap().into_inner();
+
+        let name = option_identifier_pairs.next().unwrap().as_str().to_string();
+        let field_path = match option_identifier_pairs.peek() {
+            None => None,
+            Some(_) => Some(
+                option_identifier_pairs
+                    .map(|pair| pair.as_str())
+                    .collect::<Vec<&str>>()
+                    .join("."),
+            ),
+        };
+
+        let value = option_body_inner.next().unwrap().as_str().to_string();
+
+        Ok(ProtoOption {
+            name,
+            field_path,
+            value,
+        })
     }
 }
 
@@ -96,7 +140,7 @@ impl Parser for ParserImpl {
             Ok(mut parse_root) => {
                 let mut prog = Program::new();
 
-                let top_level_stmts = parse_root.nth(0).unwrap().into_inner();
+                let top_level_stmts = parse_root.next().unwrap().into_inner();
                 for stmt in top_level_stmts {
                     match stmt.as_rule() {
                         Rule::enum_def => match Self::parse_enum(stmt) {
@@ -120,9 +164,18 @@ impl Parser for ParserImpl {
 
 #[cfg(test)]
 mod tests {
-    macro_rules! parse_test {
+    macro_rules! parse_test_raw {
         ($test_path: expr) => {{
             ParserImpl::parse_pest(include_str!($test_path))
+                .expect(&format!("failed to parse {}", $test_path))
+        }};
+    }
+
+    macro_rules! parse_test {
+        ($test_path: expr) => {{
+            let parser = ParserImpl::new();
+            parser
+                .parse(include_str!($test_path))
                 .expect(&format!("failed to parse {}", $test_path))
         }};
     }
@@ -130,8 +183,68 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_message() {
+        let program = parse_test!("../test_data/message.proto");
+
+        assert_eq!(program.types.len(), 1);
+        assert_eq!(
+            program,
+            Program {
+                types: vec![Type::Message(Message {
+                    name: "Person".to_string(),
+                    fields: vec![
+                        MessageField {
+                            field_type: "string".to_string(),
+                            name: "first_name".to_string(),
+                            modifier: None,
+                            option: None,
+                            position: 1
+                        },
+                        MessageField {
+                            field_type: "string".to_string(),
+                            name: "last_name".to_string(),
+                            modifier: None,
+                            option: None,
+                            position: 2
+                        },
+                        MessageField {
+                            field_type: "int64".to_string(),
+                            name: "date_of_birth_unix_epoch".to_string(),
+                            modifier: None,
+                            option: None,
+                            position: 3
+                        }
+                    ]
+                })]
+            }
+        );
+    }
+
+    #[test]
+    fn test_enum() {
+        let program = parse_test!("../test_data/enum.proto");
+
+        assert_eq!(program.types.len(), 1);
+        assert_eq!(
+            program,
+            Program {
+                types: vec![Type::Enum(Enum {
+                    name: "RelationshipType",
+                    values: vec![
+                        EnumField {
+                            name: "PARENT",
+                            option: None,
+                            position: 1 
+                        },
+                    ]
+                })]
+            }
+        );
+    }
+
+    #[test]
     fn test_message_raw() {
-        let root = parse_test!("../test_data/message.proto");
+        let root = parse_test_raw!("../test_data/message.proto");
 
         let program = root.peek().unwrap();
         assert_eq!(program.as_rule(), Rule::program);
@@ -151,8 +264,9 @@ mod tests {
             message_fields.nth(0).unwrap(),
             MessageField {
                 modifier: None,
-                field_type: "string",
-                name: "first_name",
+                field_type: "string".to_string(),
+                name: "first_name".to_string(),
+                option: None,
                 position: 1,
             },
         );
@@ -161,8 +275,9 @@ mod tests {
             message_fields.nth(0).unwrap(),
             MessageField {
                 modifier: None,
-                field_type: "string",
-                name: "last_name",
+                field_type: "string".to_string(),
+                name: "last_name".to_string(),
+                option: None,
                 position: 2,
             },
         );
@@ -171,8 +286,9 @@ mod tests {
             message_fields.nth(0).unwrap(),
             MessageField {
                 modifier: None,
-                field_type: "int64",
-                name: "date_of_birth_unix_epoch",
+                field_type: "int64".to_string(),
+                name: "date_of_birth_unix_epoch".to_string(),
+                option: None,
                 position: 3,
             },
         );
@@ -180,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_enum_raw() {
-        let prog = parse_test!("../test_data/enum.proto");
+        let prog = parse_test_raw!("../test_data/enum.proto");
 
         let mut definitions = prog.peek().unwrap().into_inner().collect::<Vec<_>>();
         assert_eq!(definitions.len(), 1);

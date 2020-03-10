@@ -11,7 +11,8 @@ import_modifier = { "public" }
 
 option = { "option" ~ option_body ~ ";" }
 field_option = { "[" ~ option_body ~ "]" }
-option_body = { ( identifier | ("(" ~ identifier ~ ")" ~ ("." ~ identifier)*)) ~ "=" ~ constant }
+option_body = { option_identifier ~ "=" ~ constant }
+option_identifier = _{ (identifier | "(" ~ identifier ~ ")") ~ ("." ~ identifier)* }
 
 top_level_definition = _{ enum_def | message_def }
 
