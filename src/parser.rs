@@ -83,22 +83,10 @@ impl ParserImpl {
                     Ok(option) => result.options.push(option),
                     Err(err) => return Err(err),
                 },
-                Rule::enum_value => {
-                    let mut value_parts = part.into_inner();
-                    let name = value_parts.next().unwrap().as_str().to_string();
-                    let position = value_parts.next().unwrap().as_str().parse::<u32>().unwrap();
-
-                    let options = match Self::parse_field_options(&mut value_parts) {
-                        Ok(opts) => opts,
-                        Err(err) => return Err(err),
-                    };
-
-                    result.values.push(EnumValue {
-                        name,
-                        position,
-                        options,
-                    })
-                }
+                Rule::enum_value => match Self::parse_enum_value(part) {
+                    Ok(value) => result.values.push(value),
+                    Err(err) => return Err(err),
+                },
                 err @ _ => {
                     return Err(format!(
                         "Unexpected rule found when parsing enum body: {:?}",
@@ -109,6 +97,23 @@ impl ParserImpl {
         }
 
         Ok(ProtoType::Enum(result))
+    }
+
+    fn parse_enum_value(value: Pair<Rule>) -> Result<EnumValue, String> {
+        let mut value_parts = value.into_inner();
+        let name = value_parts.next().unwrap().as_str().to_string();
+        let position = value_parts.next().unwrap().as_str().parse::<u32>().unwrap();
+
+        let options = match Self::parse_field_options(&mut value_parts) {
+            Ok(opts) => opts,
+            Err(err) => return Err(err),
+        };
+
+        Ok(EnumValue {
+            name,
+            position,
+            options,
+        })
     }
 
     fn parse_message<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
@@ -130,38 +135,10 @@ impl ParserImpl {
                     Ok(t) => result.types.push(t),
                     Err(err) => return Err(err),
                 },
-                Rule::message_field => {
-                    let mut field_parts = part.into_inner();
-
-                    let modifier = match field_parts.peek().unwrap().as_rule() {
-                        Rule::message_field_modifier => {
-                            match field_parts.next().unwrap().as_str() {
-                                "required" => Some(MessageFieldModifier::Required),
-                                "optional" => Some(MessageFieldModifier::Optional),
-                                "repeated" => Some(MessageFieldModifier::Repeated),
-                                modifier @ _ => return Err(format!("Unkown modifier {}", modifier)),
-                            }
-                        }
-                        _ => None,
-                    };
-
-                    let field_type = field_parts.next().unwrap().as_str().to_string();
-                    let name = field_parts.next().unwrap().as_str().to_string();
-                    let position = field_parts.next().unwrap().as_str().parse::<u32>().unwrap();
-
-                    let options = match Self::parse_field_options(&mut field_parts) {
-                        Ok(opts) => opts,
-                        Err(err) => return Err(err),
-                    };
-
-                    result.fields.push(MessageField {
-                        modifier,
-                        name,
-                        field_type,
-                        options,
-                        position,
-                    })
-                }
+                Rule::message_field => match Self::parse_message_field(part) {
+                    Ok(f) => result.fields.push(f),
+                    Err(err) => return Err(err),
+                },
                 err @ _ => {
                     return Err(format!(
                         "Unexpected rule {:?} when parsing message body",
@@ -172,6 +149,37 @@ impl ParserImpl {
         }
 
         Ok(ProtoType::Message(result))
+    }
+
+    fn parse_message_field(field: Pair<Rule>) -> Result<MessageField, String> {
+        let mut field_parts = field.into_inner();
+
+        let modifier = match field_parts.peek().unwrap().as_rule() {
+            Rule::message_field_modifier => match field_parts.next().unwrap().as_str() {
+                "required" => Some(MessageFieldModifier::Required),
+                "optional" => Some(MessageFieldModifier::Optional),
+                "repeated" => Some(MessageFieldModifier::Repeated),
+                modifier @ _ => return Err(format!("Unkown modifier {}", modifier)),
+            },
+            _ => None,
+        };
+
+        let field_type = field_parts.next().unwrap().as_str().to_string();
+        let name = field_parts.next().unwrap().as_str().to_string();
+        let position = field_parts.next().unwrap().as_str().parse::<u32>().unwrap();
+
+        let options = match Self::parse_field_options(&mut field_parts) {
+            Ok(opts) => opts,
+            Err(err) => return Err(err),
+        };
+
+        Ok(MessageField {
+            modifier,
+            name,
+            field_type,
+            options,
+            position,
+        })
     }
 
     fn parse_option(option: Pair<Rule>) -> Result<ProtoOption, String> {
