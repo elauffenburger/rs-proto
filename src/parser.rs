@@ -43,7 +43,7 @@ impl ParserImpl {
                     Err(err) => return Err(err),
                 },
 
-                Rule::option => match Self::parse_option_body(stmt.into_inner().next().unwrap()) {
+                Rule::option => match Self::parse_option(stmt) {
                     Ok(o) => prog.options.push(o),
                     Err(err) => return Err(err),
                 },
@@ -79,7 +79,7 @@ impl ParserImpl {
         let body_parts = enum_def_parts.next().unwrap().into_inner();
         for part in body_parts {
             match part.as_rule() {
-                Rule::option => match Self::parse_option_body(part.into_inner().next().unwrap()) {
+                Rule::option => match Self::parse_option(part) {
                     Ok(option) => result.options.push(option),
                     Err(err) => return Err(err),
                 },
@@ -88,21 +88,10 @@ impl ParserImpl {
                     let name = value_parts.next().unwrap().as_str().to_string();
                     let position = value_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
-                    let mut options = vec![];
-                    for next in value_parts {
-                        match next.as_rule() {
-                            Rule::field_option => match Self::parse_field_option(next) {
-                                Ok(option) => options.push(option),
-                                Err(err) => return Err(err),
-                            },
-                            err @ _ => {
-                                return Err(format!(
-                                    "Unknown token encountered while parsing enum options: {:?}",
-                                    err
-                                ));
-                            }
-                        }
-                    }
+                    let options = match Self::parse_field_options(&mut value_parts) {
+                        Ok(opts) => opts,
+                        Err(err) => return Err(err),
+                    };
 
                     result.values.push(EnumValue {
                         name,
@@ -160,16 +149,10 @@ impl ParserImpl {
                     let name = field_parts.next().unwrap().as_str().to_string();
                     let position = field_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
-                    let mut options = vec![];
-                    for next in field_parts {
-                        match next.as_rule() {
-                            Rule::field_option => match Self::parse_field_option(next) {
-                                Ok(option) => options.push(option),
-                                Err(err) => return Err(err),
-                            },
-                            _ => {}
-                        }
-                    }
+                    let options = match Self::parse_field_options(&mut field_parts) {
+                        Ok(opts) => opts,
+                        Err(err) => return Err(err),
+                    };
 
                     result.fields.push(MessageField {
                         modifier,
@@ -191,9 +174,32 @@ impl ParserImpl {
         Ok(ProtoType::Message(result))
     }
 
-    fn parse_field_option(option: Pair<Rule>) -> Result<ProtoOption, String> {
-        assert_eq!(option.as_rule(), Rule::field_option);
+    fn parse_option(option: Pair<Rule>) -> Result<ProtoOption, String> {
+        let option_body_pair = option.into_inner().next().unwrap();
+        Self::parse_option_body(option_body_pair)
+    }
 
+    fn parse_field_options(next_pairs: &mut Pairs<Rule>) -> Result<Vec<ProtoOption>, String> {
+        let mut options = vec![];
+        for next in next_pairs {
+            match next.as_rule() {
+                Rule::field_option => match Self::parse_field_option(next) {
+                    Ok(option) => options.push(option),
+                    Err(err) => return Err(err),
+                },
+                err @ _ => {
+                    return Err(format!(
+                        "Unknown token encountered while parsing field options: {:?}",
+                        err
+                    ));
+                }
+            }
+        }
+
+        Ok(options)
+    }
+
+    fn parse_field_option(option: Pair<Rule>) -> Result<ProtoOption, String> {
         let option_body_pair = option.into_inner().next().unwrap();
         Self::parse_option_body(option_body_pair)
     }
