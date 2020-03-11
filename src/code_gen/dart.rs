@@ -18,16 +18,17 @@ impl DartCodeGenerator {
         name_prefix: &'a str,
         indent: usize,
     ) -> Result<String, String> {
-        let indentation = "\t".repeat(indent as usize);
         let mut result = vec![];
 
+        let indentation = "\t".repeat(indent as usize);
         let enum_name = format!("{}{}", name_prefix, &enumeration.name);
 
         result.push(format!(
             "{}class {} extends {} {{\n",
             indentation, enum_name, BASE_ENUM_TYPE
         ));
-        result.push(Self::gen_enum_body(&enum_name, &enumeration.values, 1)?);
+
+        result.push(Self::gen_enum_body(&enum_name, &enumeration.values, indent + 1)?);
         result.push(format!("\n{}}}", indentation));
 
         Ok(result.join(""))
