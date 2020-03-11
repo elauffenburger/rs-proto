@@ -122,7 +122,7 @@ impl ParserImpl {
             _ => None,
         };
 
-        let field_type = field_parts.next().unwrap().as_str().to_string();
+        let field_type = Self::parse_field_type(field_parts.next().unwrap())?;
         let name = field_parts.next().unwrap().as_str().to_string();
         let position = field_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
@@ -138,6 +138,43 @@ impl ParserImpl {
             options,
             position,
         })
+    }
+
+    fn parse_field_type(type_pair: Pair<Rule>) -> Result<ProtoFieldType, String> {
+        match type_pair.as_rule() {
+            Rule::primitive => match type_pair.as_str() {
+                "int32" => Ok(ProtoFieldType::Primitive(ProtoPrimitiveType::Int32)),
+                "int64" => Ok(ProtoFieldType::Primitive(ProtoPrimitiveType::Int64)),
+                "string" => Ok(ProtoFieldType::Primitive(ProtoPrimitiveType::Str)),
+                "boolean" => Ok(ProtoFieldType::Primitive(ProtoPrimitiveType::Boolean)),
+                _ => {
+                    let next = type_pair.into_inner().next();
+                    match next {
+                        Some(next) => match next.as_rule() {
+                            Rule::map => {
+                                let mut map_parts = next.into_inner();
+                                let key = map_parts.next().unwrap();
+                                let value = map_parts.next().unwrap();
+
+                                Ok(ProtoFieldType::Primitive(ProtoPrimitiveType::Map(
+                                    Box::new(Self::parse_field_type(key)?),
+                                    Box::new(Self::parse_field_type(value)?),
+                                )))
+                            }
+                            err @ _ => Err(format!("Unknown primitive type found while parsing field type: {:?} (expected map<T,U>)", err)) 
+                        },
+                        None => Err("Unexpected end of input while parsing primitve field value type".to_string())
+                    }
+                }
+            },
+            Rule::identifier => Ok(ProtoFieldType::Identifier(type_pair.as_str().to_string())),
+            err @ _ => {
+                return Err(format!(
+                    "Unknown type found while parsing field type: {:?}",
+                    err
+                ));
+            }
+        }
     }
 
     fn parse_option(option: Pair<Rule>) -> Result<ProtoOption, String> {
@@ -198,7 +235,12 @@ impl ParserImpl {
                 Err(err) => Err(format!("{}", err)),
             },
             Rule::string => Ok(ProtoConstant::Str(
-                constant_pair.into_inner().next().unwrap().as_str().to_string(),
+                constant_pair
+                    .into_inner()
+                    .next()
+                    .unwrap()
+                    .as_str()
+                    .to_string(),
             )),
             Rule::boolean => match constant_pair.as_str() {
                 "true" => Ok(ProtoConstant::Boolean(true)),
@@ -328,7 +370,7 @@ mod tests {
                             fields: vec![MessageField {
                                 name: "ival".to_string(),
                                 modifier: None,
-                                field_type: "int64".to_string(),
+                                field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Int64),
                                 options: vec![],
                                 position: 1
                             }]
@@ -336,21 +378,26 @@ mod tests {
                         fields: vec![
                             MessageField {
                                 name: "inner_message".to_string(),
-                                field_type: "inner".to_string(),
+                                field_type: ProtoFieldType::Identifier("inner".to_string()),
                                 modifier: Some(MessageFieldModifier::Repeated),
                                 options: vec![],
                                 position: 2
                             },
                             MessageField {
                                 name: "enum_field".to_string(),
-                                field_type: "EnumAllowingAlias".to_string(),
+                                field_type: ProtoFieldType::Identifier(
+                                    "EnumAllowingAlias".to_string()
+                                ),
                                 modifier: None,
                                 options: vec![],
                                 position: 3
                             },
                             MessageField {
                                 name: "my_map".to_string(),
-                                field_type: "map<int32, string>".to_string(),
+                                field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Map(
+                                    Box::new(ProtoFieldType::Primitive(ProtoPrimitiveType::Int32)),
+                                    Box::new(ProtoFieldType::Primitive(ProtoPrimitiveType::Str))
+                                )),
                                 modifier: None,
                                 options: vec![],
                                 position: 4
@@ -400,21 +447,21 @@ mod tests {
                     types: vec![],
                     fields: vec![
                         MessageField {
-                            field_type: "string".to_string(),
+                            field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Str),
                             name: "first_name".to_string(),
                             modifier: None,
                             options: vec![],
                             position: 1
                         },
                         MessageField {
-                            field_type: "string".to_string(),
+                            field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Str),
                             name: "last_name".to_string(),
                             modifier: None,
                             options: vec![],
                             position: 2
                         },
                         MessageField {
-                            field_type: "int64".to_string(),
+                            field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Int64),
                             name: "date_of_birth_unix_epoch".to_string(),
                             modifier: None,
                             options: vec![],

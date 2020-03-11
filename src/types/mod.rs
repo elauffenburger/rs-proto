@@ -5,6 +5,21 @@ pub enum ProtoType {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum ProtoFieldType {
+    Primitive(ProtoPrimitiveType),
+    Identifier(String)
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ProtoPrimitiveType {
+    Int32,
+    Int64,
+    Str,
+    Boolean,
+    Map(Box<ProtoFieldType>, Box<ProtoFieldType>)
+}
+
+#[derive(Debug, PartialEq)]
 pub struct ProtoOption {
     pub name: String,
     pub field_path: Option<String>,
@@ -47,7 +62,7 @@ pub enum MessageFieldModifier {
 #[derive(Debug, PartialEq)]
 pub struct MessageField {
     pub modifier: Option<MessageFieldModifier>,
-    pub field_type: String,
+    pub field_type: ProtoFieldType,
     pub name: String,
     pub options: Vec<ProtoOption>,
     pub position: u32,

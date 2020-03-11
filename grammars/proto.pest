@@ -32,9 +32,9 @@ path = { identifier ~ ("." ~ identifier)* }
 constant = _{ numeric | string | boolean }
 numeric = @{ NUMBER+ }
 boolean = { "true" | "false" }
-type_identifier = { primitive | identifier }
+type_identifier = _{ primitive | identifier }
 primitive = { "int32" | "int64" | "string" | "boolean" | map }
-map = { "map" ~ "<" ~ type_identifier ~ "," ~ type_identifier ~ ">" }
+map = { "map<" ~ type_identifier ~ "," ~ type_identifier ~ ">" }
 
 string = ${ "\"" ~ string_contents ~ "\"" }
 string_contents = { (!("\"") ~ ANY)* }
