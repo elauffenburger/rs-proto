@@ -182,13 +182,37 @@ impl ParserImpl {
             None => None,
         };
 
-        let value = option_body_inner.next().unwrap().as_str().to_string();
+        let value = Self::parse_constant(option_body_inner.next().unwrap())?;
 
         Ok(ProtoOption {
             name,
             field_path,
             value,
         })
+    }
+
+    fn parse_constant(constant_pair: Pair<Rule>) -> Result<ProtoConstant, String> {
+        match constant_pair.as_rule() {
+            Rule::numeric => match constant_pair.as_str().parse() {
+                Ok(numeric) => Ok(ProtoConstant::Numeric(numeric)),
+                Err(err) => Err(format!("{}", err)),
+            },
+            Rule::string => Ok(ProtoConstant::Str(
+                constant_pair.into_inner().next().unwrap().as_str().to_string(),
+            )),
+            Rule::boolean => match constant_pair.as_str() {
+                "true" => Ok(ProtoConstant::Boolean(true)),
+                "false" => Ok(ProtoConstant::Boolean(false)),
+                _ => Err(format!(
+                    "Invalid boolean value '{}'",
+                    constant_pair.as_str().to_string()
+                )),
+            },
+            err @ _ => Err(format!(
+                "Unknown value type encountered while parsing constant: '{:?}'",
+                err
+            )),
+        }
     }
 
     fn parse_syntax(statement: Pair<Rule>) -> Result<ProtoSyntax, String> {
@@ -258,7 +282,7 @@ mod tests {
                 options: vec![ProtoOption {
                     name: "java_package".to_string(),
                     field_path: None,
-                    value: "\"com.example.foo\"".to_string()
+                    value: ProtoConstant::Str("com.example.foo".to_string())
                 }],
                 types: vec![
                     ProtoType::Enum(Enum {
@@ -266,7 +290,7 @@ mod tests {
                         options: vec![ProtoOption {
                             name: "allow_alias".to_string(),
                             field_path: None,
-                            value: "true".to_string()
+                            value: ProtoConstant::Boolean(true)
                         }],
                         values: vec![
                             EnumValue {
@@ -284,7 +308,7 @@ mod tests {
                                 options: vec![ProtoOption {
                                     name: "custom_option".to_string(),
                                     field_path: None,
-                                    value: "\"hello world\"".to_string()
+                                    value: ProtoConstant::Str("hello world".to_string())
                                 }],
                                 position: 2
                             },
@@ -295,7 +319,7 @@ mod tests {
                         options: vec![ProtoOption {
                             name: "my_option".to_string(),
                             field_path: Some("a".to_string()),
-                            value: "true".to_string()
+                            value: ProtoConstant::Boolean(true)
                         }],
                         types: vec![ProtoType::Message(Message {
                             name: "inner".to_string(),
@@ -351,7 +375,7 @@ mod tests {
                 options: vec![ProtoOption {
                     name: "java_package".to_string(),
                     field_path: None,
-                    value: "\"com.rsproto.toplevelconcepts\"".to_string()
+                    value: ProtoConstant::Str("com.rsproto.toplevelconcepts".to_string())
                 }],
                 types: vec![],
             }

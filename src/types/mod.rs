@@ -8,7 +8,14 @@ pub enum ProtoType {
 pub struct ProtoOption {
     pub name: String,
     pub field_path: Option<String>,
-    pub value: String,
+    pub value: ProtoConstant,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ProtoConstant {
+    Numeric(f32),
+    Str(String),
+    Boolean(bool)
 }
 
 #[derive(Debug, PartialEq)]

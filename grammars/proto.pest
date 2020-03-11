@@ -29,13 +29,15 @@ message_field_modifier = { "repeated" | "optional" }
 identifier = @{ ((ASCII_ALPHANUMERIC | "_"))+ }
 path = { identifier ~ ("." ~ identifier)* }
 
+constant = _{ numeric | string | boolean }
 numeric = @{ NUMBER+ }
-string = @{ "\"" ~ (!("\"") ~ ANY)* ~ "\"" }
 boolean = { "true" | "false" }
-constant = { numeric | string | boolean }
 type_identifier = { primitive | identifier }
 primitive = { "int32" | "int64" | "string" | "boolean" | map }
 map = { "map" ~ "<" ~ type_identifier ~ "," ~ type_identifier ~ ">" }
+
+string = ${ "\"" ~ string_contents ~ "\"" }
+string_contents = { (!("\"") ~ ANY)* }
 
 WHITESPACE = _{ " " | "\t" }
 COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
