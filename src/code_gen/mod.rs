@@ -13,6 +13,6 @@ pub trait CodeGenerator {
 
 pub fn generator_for(parser: Box<Parser>, language: Language) -> impl CodeGenerator {
     match language {
-        Dart => DartCodeGenerator::new(parser),
+        Language::Dart => DartCodeGenerator::new(parser),
     }
 }

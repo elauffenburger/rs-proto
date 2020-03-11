@@ -26,10 +26,3 @@ pub fn camel_case<'a>(string: CasedString) -> String {
         }
     }
 }
-
-pub fn pascal_case<'a>(string: &'a str) -> String {
-    let mut result = string.to_lowercase().chars().collect::<Vec<char>>();
-    result[0] = result[0].to_uppercase().nth(0).unwrap();
-
-    result.iter().collect()
-}
