@@ -3,5 +3,7 @@ extern crate pest;
 extern crate pest_derive;
 
 pub mod parser;
+pub mod code_gen;
+pub mod utils;
 
 fn main() {}

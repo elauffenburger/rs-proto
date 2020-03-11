@@ -1,4 +1,5 @@
 enum RelationshipType {
+    UNKNOWN_VALUE = 0;
     PARENT = 1;
     SIBLING = 2;
     CHILD = 3;
