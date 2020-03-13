@@ -11,7 +11,7 @@ pub struct DartCodeGenerator {
     parser: Box<Parser>,
 }
 
-type QueuedOp = FnOnce(Rc<RefCell<GeneratorEnvironment>>) -> Result<String, String>;
+type QueuedOp = FnMut(&mut GeneratorEnvironment) -> Result<String, String>;
 
 pub struct GeneratorEnvironment {
     // A lookup for a fully-qualified version of an identifier.
@@ -37,7 +37,7 @@ impl GeneratorEnvironment {
         }
     }
 
-    pub fn new_child(&mut self, scope_name: Option<String>) -> Rc<RefCell<Self>> {
+    pub fn new_child(&mut self, scope_name: Option<&str>) -> Rc<RefCell<Self>> {
         let child = Rc::new(RefCell::new(GeneratorEnvironment {
             identifier_lookup: HashMap::new(),
             queued_ops: vec![],
@@ -76,6 +76,26 @@ impl GeneratorEnvironment {
     pub fn queue_op(&mut self, op: Box<QueuedOp>) {
         self.queued_ops.push(op);
     }
+
+    pub fn flush_queued_ops(&mut self) -> Result<Vec<String>, String> {
+        let mut results = vec![];
+
+        while let Some(mut op) = self.queued_ops.pop() {
+            results.push(op(self)?);
+        }
+
+        Ok(results)
+    }
+
+    pub fn flush_queued_ops_deep(&mut self) -> Result<Vec<String>, String> {
+        let mut results = self.flush_queued_ops()?;
+
+        for child in &self.children {
+            results.extend(child.borrow_mut().flush_queued_ops_deep()?);
+        }
+
+        Ok(results)
+    }
 }
 
 impl DartCodeGenerator {
@@ -83,9 +103,9 @@ impl DartCodeGenerator {
         DartCodeGenerator { parser }
     }
 
-    fn gen_type(
+    fn gen_type<'a>(
         proto_type: &ProtoType,
-        env: Rc<RefCell<GeneratorEnvironment>>,
+        env: &'a mut GeneratorEnvironment,
     ) -> Result<String, String> {
         match proto_type {
             ProtoType::Enum(enumeration) => Self::gen_enum(&enumeration, env, 0),
@@ -94,9 +114,9 @@ impl DartCodeGenerator {
         }
     }
 
-    fn gen_message<'a>(
+    fn gen_message(
         message: &ProtoMessage,
-        env: Rc<RefCell<GeneratorEnvironment>>,
+        env: &mut GeneratorEnvironment,
         indent: usize,
     ) -> Result<String, String> {
         let mut result = vec![];
@@ -107,33 +127,35 @@ impl DartCodeGenerator {
         result.push(format!(
             "{}class {} {{\n",
             indentation,
-            env.borrow().get_qualified_type_name(&message.name)
+            env.get_qualified_type_name(&message.name)
         ));
 
         for field in &message.fields {
             result.push(format!(
                 "{}{}\n",
                 &inner_indentation,
-                Self::gen_message_field(field, env.clone(), indent + 1)?
+                Self::gen_message_field(field, env, indent + 1)?
             ));
         }
 
         result.push(format!("{}}}", indentation));
 
         // Queue up message ops to be written after we finish unrolling the environment.
+        let child_env = env.new_child(Some(&message.name));
         for proto_type in &message.types {
             let proto_type = proto_type.clone();
 
-            env.borrow_mut()
+            child_env
+                .borrow_mut()
                 .queue_op(Box::new(move |env| Self::gen_type(&proto_type, env)));
         }
 
         Ok(result.join(""))
     }
 
-    fn gen_message_field(
+    fn gen_message_field<'a>(
         field: &ProtoMessageField,
-        env: Rc<RefCell<GeneratorEnvironment>>,
+        env: &'a mut GeneratorEnvironment,
         indent: usize,
     ) -> Result<String, String> {
         let mut result = vec![];
@@ -152,20 +174,18 @@ impl DartCodeGenerator {
 
     fn get_dart_type(
         field_type: &ProtoFieldType,
-        env: Rc<RefCell<GeneratorEnvironment>>,
+        env: &mut GeneratorEnvironment,
     ) -> Result<String, String> {
         match field_type {
-            ProtoFieldType::Identifier(identifier) => {
-                Ok(env.borrow().resolve_identifier(identifier))
-            }
+            ProtoFieldType::Identifier(identifier) => Ok(env.resolve_identifier(identifier)),
             ProtoFieldType::Primitive(primitive) => match primitive {
                 ProtoPrimitiveType::Int32 | ProtoPrimitiveType::Int64 => Ok("int".to_string()),
                 ProtoPrimitiveType::Boolean => Ok("bool".to_string()),
                 ProtoPrimitiveType::Str => Ok("String".to_string()),
                 ProtoPrimitiveType::Map(key, value) => Ok(format!(
                     "Map<{}, {}>",
-                    Self::get_dart_type(key, env.clone())?,
-                    Self::get_dart_type(value, env.clone())?
+                    Self::get_dart_type(key, env)?,
+                    Self::get_dart_type(value, env)?
                 )),
             },
         }
@@ -173,13 +193,13 @@ impl DartCodeGenerator {
 
     fn gen_enum(
         enumeration: &ProtoEnum,
-        env: Rc<RefCell<GeneratorEnvironment>>,
+        env: &mut GeneratorEnvironment,
         indent: usize,
     ) -> Result<String, String> {
         let mut result = vec![];
 
         let indentation = "\t".repeat(indent as usize);
-        let enum_name = env.borrow().get_qualified_type_name(&enumeration.name);
+        let enum_name = env.get_qualified_type_name(&enumeration.name);
 
         result.push(format!(
             "{}class {} extends {} {{\n",
@@ -191,6 +211,7 @@ impl DartCodeGenerator {
             &enumeration.values,
             indent + 1,
         )?);
+
         result.push(format!("\n{}}}", indentation));
 
         Ok(result.join(""))
@@ -291,9 +312,14 @@ impl CodeGenerator for DartCodeGenerator {
         let prog = self.parser.parse(src)?;
 
         let env = Rc::new(RefCell::new(GeneratorEnvironment::new()));
+
+        // Generate all the top-level types.
         for proto_type in &prog.types {
-            result.push(Self::gen_type(proto_type, env.clone())?);
+            result.push(Self::gen_type(proto_type, &mut env.clone().borrow_mut())?);
         }
+
+        // Generate any types that were queued up while generating top-level types.
+        result.extend(env.borrow_mut().flush_queued_ops_deep()?);
 
         Ok(result.join(""))
     }
@@ -319,8 +345,9 @@ mod tests {
     fn test_nested() {
         let result = gen_code_for_test!("../../test_data/nested.proto");
 
-        assert_eq!(result,
-        "class Foo {
+        assert_eq!(
+            result,
+            "class Foo {
 }
 
 class Foo_Bar {
@@ -346,7 +373,8 @@ class Foo_Baz_Bar extends ProtobufEnum {
 \t\tthis.name = name;
 \t}
 }
-            ");
+            "
+        );
     }
 
     #[test]
