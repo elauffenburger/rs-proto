@@ -1,16 +1,16 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ProtoType {
     Message(ProtoMessage),
     Enum(ProtoEnum),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ProtoFieldType {
     Primitive(ProtoPrimitiveType),
     Identifier(String)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ProtoPrimitiveType {
     Int32,
     Int64,
@@ -19,26 +19,26 @@ pub enum ProtoPrimitiveType {
     Map(Box<ProtoFieldType>, Box<ProtoFieldType>)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProtoOption {
     pub name: String,
     pub field_path: Option<String>,
     pub value: ProtoConstant,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ProtoConstant {
     Numeric(f32),
     Str(String),
     Boolean(bool)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProtoMessage {
     pub name: String,
     pub options: Vec<ProtoOption>,
     pub types: Vec<ProtoType>,
-    pub fields: Vec<MessageField>,
+    pub fields: Vec<ProtoMessageField>,
 }
 
 impl<'a> ProtoMessage {
@@ -52,23 +52,23 @@ impl<'a> ProtoMessage {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum MessageFieldModifier {
+#[derive(Debug, PartialEq, Clone)]
+pub enum ProtoMessageFieldModifier {
     Required,
     Optional,
     Repeated,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct MessageField {
-    pub modifier: Option<MessageFieldModifier>,
+#[derive(Debug, PartialEq, Clone)]
+pub struct ProtoMessageField {
+    pub modifier: Option<ProtoMessageFieldModifier>,
     pub field_type: ProtoFieldType,
     pub name: String,
     pub options: Vec<ProtoOption>,
     pub position: u32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProtoEnum {
     pub name: String,
     pub options: Vec<ProtoOption>,
@@ -85,31 +85,31 @@ impl ProtoEnum {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProtoEnumValue {
     pub name: String,
     pub options: Vec<ProtoOption>,
     pub position: u32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ProtoSyntax {
     Proto2,
     Proto3,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ProtoImportModifier {
     Public
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProtoImport {
     pub path: String,
     pub modifier: Option<ProtoImportModifier>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Program {
     pub syntax: Option<ProtoSyntax>,
     pub package: Option<String>,

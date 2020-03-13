@@ -101,6 +101,7 @@ impl ParserImpl {
             match part.as_rule() {
                 Rule::option => result.options.push(Self::parse_option(part)?),
                 Rule::message_def => result.types.push(Self::parse_message(part)?),
+                Rule::enum_def => result.types.push(Self::parse_enum(part)?),
                 Rule::message_field => result.fields.push(Self::parse_message_field(part)?),
                 err @ _ => {
                     return Err(format!(
@@ -114,14 +115,14 @@ impl ParserImpl {
         Ok(ProtoType::Message(result))
     }
 
-    fn parse_message_field(field: Pair<Rule>) -> Result<MessageField, String> {
+    fn parse_message_field(field: Pair<Rule>) -> Result<ProtoMessageField, String> {
         let mut field_parts = field.into_inner();
 
         let modifier = match field_parts.peek().unwrap().as_rule() {
             Rule::message_field_modifier => match field_parts.next().unwrap().as_str() {
-                "required" => Some(MessageFieldModifier::Required),
-                "optional" => Some(MessageFieldModifier::Optional),
-                "repeated" => Some(MessageFieldModifier::Repeated),
+                "required" => Some(ProtoMessageFieldModifier::Required),
+                "optional" => Some(ProtoMessageFieldModifier::Optional),
+                "repeated" => Some(ProtoMessageFieldModifier::Repeated),
                 modifier @ _ => return Err(format!("Unkown modifier {}", modifier)),
             },
             _ => None,
@@ -136,7 +137,7 @@ impl ParserImpl {
             Err(err) => return Err(err),
         };
 
-        Ok(MessageField {
+        Ok(ProtoMessageField {
             modifier,
             name,
             field_type,
@@ -372,7 +373,7 @@ mod tests {
                             name: "inner".to_string(),
                             options: vec![],
                             types: vec![],
-                            fields: vec![MessageField {
+                            fields: vec![ProtoMessageField {
                                 name: "ival".to_string(),
                                 modifier: None,
                                 field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Int64),
@@ -381,14 +382,14 @@ mod tests {
                             }]
                         })],
                         fields: vec![
-                            MessageField {
+                            ProtoMessageField {
                                 name: "inner_message".to_string(),
                                 field_type: ProtoFieldType::Identifier("inner".to_string()),
-                                modifier: Some(MessageFieldModifier::Repeated),
+                                modifier: Some(ProtoMessageFieldModifier::Repeated),
                                 options: vec![],
                                 position: 2
                             },
-                            MessageField {
+                            ProtoMessageField {
                                 name: "enum_field".to_string(),
                                 field_type: ProtoFieldType::Identifier(
                                     "EnumAllowingAlias".to_string()
@@ -397,7 +398,7 @@ mod tests {
                                 options: vec![],
                                 position: 3
                             },
-                            MessageField {
+                            ProtoMessageField {
                                 name: "my_map".to_string(),
                                 field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Map(
                                     Box::new(ProtoFieldType::Primitive(ProtoPrimitiveType::Int32)),
@@ -451,21 +452,21 @@ mod tests {
                     options: vec![],
                     types: vec![],
                     fields: vec![
-                        MessageField {
+                        ProtoMessageField {
                             field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Str),
                             name: "first_name".to_string(),
                             modifier: None,
                             options: vec![],
                             position: 1
                         },
-                        MessageField {
+                        ProtoMessageField {
                             field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Str),
                             name: "last_name".to_string(),
                             modifier: None,
                             options: vec![],
                             position: 2
                         },
-                        MessageField {
+                        ProtoMessageField {
                             field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Int64),
                             name: "date_of_birth_unix_epoch".to_string(),
                             modifier: None,

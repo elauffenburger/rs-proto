@@ -1,0 +1,9 @@
+message Foo {
+    message Bar {
+        enum Baz {}
+    }
+
+    message Baz {
+        enum Bar {}
+    }
+}
