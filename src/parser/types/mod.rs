@@ -4,6 +4,15 @@ pub enum ProtoType {
     Enum(ProtoEnum),
 }
 
+impl ProtoType {
+    pub fn get_name(&self) -> &str {
+        match self {
+            ProtoType::Message(message) => &message.name,
+            ProtoType::Enum(enumeration) => &enumeration.name
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProtoFieldType {
     Primitive(ProtoPrimitiveType),

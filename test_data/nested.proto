@@ -1,9 +1,13 @@
 message Foo {
     message Bar {
         enum Baz {}
+
+        Bar bar = 1;
     }
 
     message Baz {
         enum Bar {}
+
+        Bar bar = 1;
     }
 }
