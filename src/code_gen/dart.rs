@@ -1,9 +1,9 @@
 use super::CodeGenerator;
+use crate::code_gen::env::*;
 use crate::parser::*;
 use crate::utils::{camel_case, CasedString};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::code_gen::env::*;
 
 const BASE_ENUM_TYPE: &'static str = "ProtobufEnum";
 
@@ -229,7 +229,17 @@ impl CodeGenerator for DartCodeGenerator {
 
         let prog = self.parser.parse(src)?;
 
-        let type_hierarchy = ProtoTypeHierarchy::from_program(&prog);
+        let type_hierarchy = ProtoTypeHierarchy::from_program(
+            &prog,
+            IdentifierQualifier::new(Box::new(|proto_type, parent| {
+                match parent.clone().borrow().fully_qualified_identifier.clone() {
+                    Some(parent_identifier) => {
+                        format!("{}_{}", parent_identifier, &proto_type.get_name())
+                    }
+                    None => proto_type.get_name().to_string(),
+                }
+            })),
+        );
         let env = Rc::new(RefCell::new(GeneratorEnvironment::new(Rc::new(
             type_hierarchy,
         ))));
