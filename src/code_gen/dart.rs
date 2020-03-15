@@ -8,13 +8,6 @@ use std::rc::Rc;
 
 const BASE_ENUM_TYPE: &'static str = "ProtobufEnum";
 
-fn resolve_identifier(parent_identifier: &Option<String>, identifier: &str) -> String {
-    match parent_identifier {
-        Some(parent_identifier) => format!("{}_{}", parent_identifier, identifier),
-        None => identifier.to_string(),
-    }
-}
-
 pub struct DartCodeGenerator {
     parser: Box<Parser>,
 }
@@ -134,10 +127,14 @@ impl ProtoTypeHierarchyNode {
         parent: Rc<RefCell<ProtoTypeHierarchyNode>>,
         proto_type: Rc<ProtoType>,
     ) -> Rc<RefCell<Self>> {
-        let fully_qualified_identifier = Some(resolve_identifier(
-            &parent.borrow().fully_qualified_identifier,
-            &proto_type.get_name(),
-        ));
+        let fully_qualified_identifier = Some(
+            match parent.clone().borrow().fully_qualified_identifier.clone() {
+                Some(parent_identifier) => {
+                    format!("{}_{}", parent_identifier, &proto_type.clone().get_name())
+                }
+                None => proto_type.clone().get_name().to_string(),
+            },
+        );
 
         let result = Rc::new(RefCell::new(ProtoTypeHierarchyNode {
             parent: Some(parent),
@@ -210,6 +207,13 @@ impl GeneratorEnvironment {
         child
     }
 
+    pub fn get_fully_qualified_identifier(&self) -> Option<String> {
+        self.type_context
+            .borrow()
+            .fully_qualified_identifier
+            .clone()
+    }
+
     pub fn resolve_proto_type(
         &self,
         identifier: &str,
@@ -236,7 +240,7 @@ impl GeneratorEnvironment {
                         curr = node.borrow().parent.clone();
                     }
                 },
-                None => return None
+                None => return None,
             }
         }
     }
@@ -257,13 +261,6 @@ impl GeneratorEnvironment {
             .expect("expected fully qualified identifier on non-root node");
 
         identifier.to_string()
-    }
-
-    pub fn format_identifier(&self, identifier: &str) -> String {
-        resolve_identifier(
-            &self.type_context.borrow().fully_qualified_identifier,
-            identifier,
-        )
     }
 
     pub fn queue_op(&mut self, op: QueuedOp) {
@@ -319,7 +316,10 @@ impl DartCodeGenerator {
         let indentation = "\t".repeat(indent);
         let inner_indentation = "\t".repeat(indent);
 
-        let message_name = env.format_identifier(&message.name);
+        let message_name = env
+            .get_fully_qualified_identifier()
+            .expect("expect to generate message in the context of a proto type");
+
         result.push(format!("{}class {} {{\n", indentation, &message_name));
 
         for field in &message.fields {
@@ -333,8 +333,8 @@ impl DartCodeGenerator {
         result.push(format!("{}}}", indentation));
 
         // Queue up message ops to be written after we finish unrolling the environment.
-        let child_env = env.new_child(&ProtoType::Message(message.clone()));
         for proto_type in &message.types {
+            let child_env = env.new_child(proto_type);
             let proto_type = proto_type.clone();
 
             child_env
@@ -394,7 +394,9 @@ impl DartCodeGenerator {
 
         let indentation = "\t".repeat(indent as usize);
 
-        let enum_name = env.format_identifier(&enumeration.name);
+        let enum_name = env
+            .get_fully_qualified_identifier()
+            .expect("expect to generate message in the context of a proto type");
 
         result.push(format!(
             "{}class {} extends {} {{\n",
@@ -513,7 +515,10 @@ impl CodeGenerator for DartCodeGenerator {
 
         // Generate all the top-level types.
         for proto_type in &prog.types {
-            result.push(Self::gen_type(proto_type, &mut env.clone().borrow_mut())?);
+            result.push(Self::gen_type(
+                proto_type,
+                &mut env.borrow_mut().new_child(proto_type).borrow_mut(),
+            )?);
         }
 
         // Generate any types that were queued up while generating top-level types.
@@ -547,27 +552,33 @@ mod tests {
             result,
             "class Foo {\n}
 
-class Foo_Baz {
-\tFoo_Baz_Bar bar;
+class Foo_Bar {
+\tFoo_Bar bar;
 }
 
-class Foo_Baz_Bar extends ProtobufEnum {
-\tstatic List<Foo_Baz_Bar> values = [
+class Foo_Bar_Baz extends ProtobufEnum {
+
+\tstatic List<Foo_Bar_Baz> values = [
+
 \t];
-\tFoo_Baz_Bar._(int position, String name) {
+
+\tFoo_Bar_Baz._(int position, String name) {
 \t\tthis.position = position;
 \t\tthis.name = name;
 \t}
 }
 
-class Foo_Bar {
-\tFoo.Bar bar;
+class Foo_Baz {
+\tFoo_Baz_Bar bar;
 }
 
-class Foo_Bar_Baz extends ProtobufEnum {
-\tstatic List<Foo_Bar_Baz> values = [
+class Foo_Baz_Bar extends ProtobufEnum {
+
+\tstatic List<Foo_Baz_Bar> values = [
+
 \t];
-\tFoo_Bar_Baz._(int position, String name) {
+
+\tFoo_Baz_Bar._(int position, String name) {
 \t\tthis.position = position;
 \t\tthis.name = name;
 \t}
