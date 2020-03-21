@@ -16,7 +16,7 @@ impl ProtoType {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProtoFieldType {
     Primitive(ProtoPrimitiveType),
-    Identifier(String)
+    Path(String)
 }
 
 #[derive(Debug, PartialEq, Clone)]

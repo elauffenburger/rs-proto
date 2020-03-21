@@ -27,12 +27,12 @@ message_field = { message_field_modifier? ~ type_identifier ~ identifier ~ "=" ~
 message_field_modifier = { "repeated" | "optional" }
 
 identifier = @{ ((ASCII_ALPHANUMERIC | "_"))+ }
-path = { identifier ~ ("." ~ identifier)* }
+path = @{ identifier ~ ("." ~ identifier)* }
 
 constant = _{ numeric | string | boolean }
 numeric = @{ NUMBER+ }
 boolean = { "true" | "false" }
-type_identifier = _{ primitive | identifier }
+type_identifier = _{ primitive | path }
 primitive = { "int32" | "int64" | "string" | "boolean" | map }
 map = { "map<" ~ type_identifier ~ "," ~ type_identifier ~ ">" }
 

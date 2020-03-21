@@ -92,7 +92,7 @@ impl DartCodeGenerator {
         env: &mut GeneratorEnvironment,
     ) -> Result<String, String> {
         match field_type {
-            ProtoFieldType::Identifier(identifier) => Ok(env.resolve_identifier(identifier)),
+            ProtoFieldType::Path(identifier) => Ok(env.resolve_identifier(identifier)),
             ProtoFieldType::Primitive(primitive) => match primitive {
                 ProtoPrimitiveType::Int32 | ProtoPrimitiveType::Int64 => Ok("int".to_string()),
                 ProtoPrimitiveType::Boolean => Ok("bool".to_string()),
