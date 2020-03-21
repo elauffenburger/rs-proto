@@ -234,13 +234,59 @@ impl GeneratorEnvironment {
 
     pub fn resolve_proto_type(
         &self,
-        identifier: &str,
+        path: &ProtoIdentifierPath,
     ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode>>> {
-        // TODO: this *should* work for types like "Foo" or "Bar", but nested expressions like
-        // "Foo.Bar" will fail. We need to break up the identifier into ["Foo", "Bar"] and then
-        // iteratively resolve Foo, then Bar from Foo, and then finally return Bar.
+        println!("deriving path for {:?}", path);
 
-        let mut curr = Some(self.type_context.clone());
+        path.get_path_parts()
+            .iter()
+            .fold(None, |acc, identifier| match acc {
+                None => {
+                    let starting_context = &self.type_context;
+                    println!(
+                        "starting context: {:?}",
+                        starting_context
+                            .clone()
+                            .borrow()
+                            .fully_qualified_identifier
+                            .clone()
+                    );
+
+                    let derived_context =
+                        Self::resolve_proto_type_relative_to_context(identifier, starting_context);
+                    println!(
+                        "derived_context: {:?}",
+                        derived_context
+                            .clone()
+                            .map(|node| node.borrow().fully_qualified_identifier.clone())
+                    );
+
+                    Some(derived_context)
+                }
+                Some(result) => match result {
+                    None => None,
+                    Some(context) => {
+                        let derived_context =
+                            Self::resolve_proto_type_relative_to_context(identifier, &context);
+                        println!(
+                            "derived_context: {:?}",
+                            derived_context
+                                .clone()
+                                .map(|node| node.borrow().fully_qualified_identifier.clone())
+                        );
+
+                        Some(derived_context)
+                    }
+                },
+            })
+            .unwrap()
+    }
+
+    fn resolve_proto_type_relative_to_context(
+        identifier: &str,
+        type_context: &Rc<RefCell<ProtoTypeHierarchyNode>>,
+    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode>>> {
+        let mut curr = Some(type_context.clone());
 
         loop {
             match curr.clone() {
@@ -263,12 +309,12 @@ impl GeneratorEnvironment {
         }
     }
 
-    pub fn resolve_identifier(&self, identifier: &str) -> String {
-        let resolved_type = match self.resolve_proto_type(identifier) {
+    pub fn resolve_identifier_path(&self, path: &ProtoIdentifierPath) -> String {
+        let resolved_type = match self.resolve_proto_type(path) {
             Some(resolved_type) => resolved_type,
             _ => panic!(
-                "Failed to find identifier '{}' relative to {:?}",
-                identifier, self
+                "Failed to find identifier '{:?}' relative to {:?}",
+                path, self
             ),
         };
 

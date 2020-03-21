@@ -9,5 +9,7 @@ message Foo {
         enum Bar {}
 
         Bar bar = 1;
+        Baz.Bar bar2 = 2;
+        Foo.Bar.Baz baz = 3;
     }
 }

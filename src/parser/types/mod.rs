@@ -16,7 +16,26 @@ impl ProtoType {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProtoFieldType {
     Primitive(ProtoPrimitiveType),
+    IdentifierPath(ProtoIdentifierPath)
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ProtoIdentifierPath {
     Path(String)
+}
+
+impl ProtoIdentifierPath {
+    pub fn get_path_parts(&self) -> Vec<&str> {
+        match self {
+            ProtoIdentifierPath::Path(path) => path.split(".").collect()
+        }
+    }
+}
+
+impl From<String> for ProtoIdentifierPath {
+    fn from(string: String) -> Self {
+        ProtoIdentifierPath::Path(string)
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

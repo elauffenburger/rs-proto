@@ -173,7 +173,9 @@ impl ParserImpl {
                     }
                 }
             },
-            Rule::path => Ok(ProtoFieldType::Path(type_pair.as_str().to_string())),
+            Rule::path => Ok(ProtoFieldType::IdentifierPath(
+                type_pair.as_str().to_string().into(),
+            )),
             err @ _ => {
                 return Err(format!(
                     "Unknown type found while parsing field type: {:?}",
@@ -384,15 +386,17 @@ mod tests {
                         fields: vec![
                             ProtoMessageField {
                                 name: "inner_message".to_string(),
-                                field_type: ProtoFieldType::Path("inner".to_string()),
+                                field_type: ProtoFieldType::IdentifierPath(
+                                    "inner".to_string().into()
+                                ),
                                 modifier: Some(ProtoMessageFieldModifier::Repeated),
                                 options: vec![],
                                 position: 2
                             },
                             ProtoMessageField {
                                 name: "enum_field".to_string(),
-                                field_type: ProtoFieldType::Path(
-                                    "EnumAllowingAlias".to_string()
+                                field_type: ProtoFieldType::IdentifierPath(
+                                    "EnumAllowingAlias".to_string().into()
                                 ),
                                 modifier: None,
                                 options: vec![],

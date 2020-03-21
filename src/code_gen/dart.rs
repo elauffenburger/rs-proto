@@ -92,7 +92,7 @@ impl DartCodeGenerator {
         env: &mut GeneratorEnvironment,
     ) -> Result<String, String> {
         match field_type {
-            ProtoFieldType::Path(identifier) => Ok(env.resolve_identifier(identifier)),
+            ProtoFieldType::IdentifierPath(identifier) => Ok(env.resolve_identifier_path(identifier)),
             ProtoFieldType::Primitive(primitive) => match primitive {
                 ProtoPrimitiveType::Int32 | ProtoPrimitiveType::Int64 => Ok("int".to_string()),
                 ProtoPrimitiveType::Boolean => Ok("bool".to_string()),
@@ -301,6 +301,8 @@ class Foo_Bar_Baz extends ProtobufEnum {
 
 class Foo_Baz {
 \tFoo_Baz_Bar bar;
+\tFoo_Baz_Bar bar2;
+\tFoo_Bar_Baz baz;
 }
 
 class Foo_Baz_Bar extends ProtobufEnum {
