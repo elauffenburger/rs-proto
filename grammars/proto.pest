@@ -1,4 +1,4 @@
-program = { ((top_level_statement ~ NEWLINE?) | NEWLINE)* }
+program = { ((top_level_statement ~ NEWLINE?) | NEWLINE)+ }
 top_level_statement = _{ syntax | package | import | option | top_level_definition }
 
 syntax = { "syntax" ~ "=" ~ "\"" ~ identifier ~ "\"" ~ ";" }
