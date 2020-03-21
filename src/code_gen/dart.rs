@@ -232,7 +232,7 @@ impl CodeGenerator for DartCodeGenerator {
         let type_hierarchy = ProtoTypeHierarchy::from_program(
             &prog,
             IdentifierQualifier::new(Box::new(|proto_type, parent| {
-                match parent.clone().fully_qualified_identifier.clone() {
+                match parent.clone().borrow().fully_qualified_identifier.clone() {
                     Some(parent_identifier) => {
                         format!("{}_{}", parent_identifier, &proto_type.get_name())
                     }
