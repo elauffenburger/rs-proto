@@ -177,9 +177,9 @@ impl ProtoTypeHierarchyNode {
 }
 
 #[derive(Debug)]
-pub struct GeneratorEnvironment {
+pub struct GeneratorEnvironment<'hierarchy> {
     // Hierarchy of known proto types.
-    type_hierarchy: Rc<ProtoTypeHierarchy>,
+    type_hierarchy: &'hierarchy ProtoTypeHierarchy,
 
     // The type we're evaluating operations in the context of.
     type_context: Rc<RefCell<ProtoTypeHierarchyNode>>,
@@ -188,11 +188,11 @@ pub struct GeneratorEnvironment {
     queued_ops: Vec<QueuedOp>,
 
     // Children of this environment.
-    children: Vec<Rc<RefCell<GeneratorEnvironment>>>,
+    children: Vec<Rc<RefCell<GeneratorEnvironment<'hierarchy>>>>,
 }
 
-impl GeneratorEnvironment {
-    pub fn new(type_hierarchy: Rc<ProtoTypeHierarchy>) -> Self {
+impl<'h> GeneratorEnvironment<'h> {
+    pub fn new(type_hierarchy: &'h ProtoTypeHierarchy) -> Self {
         let type_context = type_hierarchy.head.clone();
 
         GeneratorEnvironment {

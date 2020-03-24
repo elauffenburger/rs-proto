@@ -240,9 +240,8 @@ impl CodeGenerator for DartCodeGenerator {
                 }
             })),
         );
-        let env = Rc::new(RefCell::new(GeneratorEnvironment::new(Rc::new(
-            type_hierarchy,
-        ))));
+
+        let env = Rc::new(RefCell::new(GeneratorEnvironment::new(&type_hierarchy)));
 
         // Generate all the top-level types.
         for proto_type in &prog.types {
