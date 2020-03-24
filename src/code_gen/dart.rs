@@ -92,7 +92,9 @@ impl DartCodeGenerator {
         env: &mut GeneratorEnvironment,
     ) -> Result<String, String> {
         match field_type {
-            ProtoFieldType::IdentifierPath(identifier) => Ok(env.resolve_identifier_path(identifier)),
+            ProtoFieldType::IdentifierPath(identifier) => {
+                Ok(env.resolve_identifier_path(identifier))
+            }
             ProtoFieldType::Primitive(primitive) => match primitive {
                 ProtoPrimitiveType::Int32 | ProtoPrimitiveType::Int64 => Ok("int".to_string()),
                 ProtoPrimitiveType::Boolean => Ok("bool".to_string()),
@@ -241,18 +243,18 @@ impl CodeGenerator for DartCodeGenerator {
             })),
         );
 
-        let env = Rc::new(RefCell::new(GeneratorEnvironment::new(&type_hierarchy)));
+        let mut env = GeneratorEnvironment::new(&type_hierarchy);
 
         // Generate all the top-level types.
         for proto_type in &prog.types {
             result.push(Self::gen_type(
                 proto_type,
-                &mut env.borrow_mut().new_child(proto_type).borrow_mut(),
+                &mut env.new_child(proto_type).borrow_mut(),
             )?);
         }
 
         // Generate any types that were queued up while generating top-level types.
-        result.extend(env.borrow_mut().flush_queued_ops_deep()?);
+        result.extend(env.flush_queued_ops_deep()?);
 
         Ok(result.join(""))
     }
