@@ -17,8 +17,8 @@ pub enum IdentifierQualifier {
 }
 
 impl IdentifierQualifier {
-    pub fn new(qualifierFn: Box<IdentifierQualfifierFn>) -> Self {
-        IdentifierQualifier::IdentifierQualifier(qualifierFn)
+    pub fn new(qualifier_fn: Box<IdentifierQualfifierFn>) -> Self {
+        IdentifierQualifier::IdentifierQualifier(qualifier_fn)
     }
 
     pub fn invoke(
@@ -27,8 +27,8 @@ impl IdentifierQualifier {
         parent: Rc<RefCell<ProtoTypeHierarchyNode>>,
     ) -> String {
         match self {
-            IdentifierQualifier::IdentifierQualifier(qualifierFn) => {
-                qualifierFn(proto_type, parent)
+            IdentifierQualifier::IdentifierQualifier(qualifier_fn) => {
+                qualifier_fn(proto_type, parent)
             }
         }
     }

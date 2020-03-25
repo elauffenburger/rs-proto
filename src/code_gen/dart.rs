@@ -2,8 +2,6 @@ use super::CodeGenerator;
 use crate::code_gen::env::*;
 use crate::parser::*;
 use crate::utils::{camel_case, CasedString};
-use std::cell::RefCell;
-use std::rc::Rc;
 
 const BASE_ENUM_TYPE: &'static str = "ProtobufEnum";
 
@@ -23,7 +21,6 @@ impl DartCodeGenerator {
         match proto_type {
             ProtoType::Enum(enumeration) => Self::gen_enum(&enumeration, env, 0),
             ProtoType::Message(message) => Self::gen_message(&message, env, 0),
-            err @ _ => Err(format!("Unknown proto type '{:?}'", err)),
         }
     }
 
@@ -273,6 +270,7 @@ mod tests {
             generator
                 .gen_code(include_str!($test_path))
                 .expect("unsuccessful codegen")
+                .to_owned()
         }};
     }
 
