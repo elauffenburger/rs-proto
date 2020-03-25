@@ -3,7 +3,7 @@ pub enum CasedString<'a> {
     SnakeCase(&'a str),
 }
 
-pub fn camel_case<'a>(string: CasedString) -> String {
+pub fn camel_case(string: CasedString) -> String {
     match string {
         CasedString::ScreamingSnakeCase(string) | CasedString::SnakeCase(string) => {
             let lowercased_string = string.to_lowercase();
@@ -13,12 +13,11 @@ pub fn camel_case<'a>(string: CasedString) -> String {
 
             while let Some(ch) = chars.next() {
                 match ch {
-                    '_' => match chars.next() {
-                        Some(ch) => {
+                    '_' => {
+                        if let Some(ch) = chars.next() {
                             result.push(ch.to_uppercase().next().unwrap());
                         }
-                        _ => {}
-                    },
+                    }
                     _ => result.push(ch),
                 }
             }

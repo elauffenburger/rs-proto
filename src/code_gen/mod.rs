@@ -1,8 +1,8 @@
 mod dart;
 mod env;
 
-use dart::DartCodeGenerator;
 use crate::parser::Parser;
+use dart::DartCodeGenerator;
 
 pub enum Language {
     Dart,

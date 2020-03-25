@@ -13,17 +13,14 @@ pub trait Parser {
 }
 
 pub fn new_parser() -> impl Parser {
-    ParserImpl::new()
+    ParserImpl::default()
 }
 
+#[derive(Default)]
 pub struct ParserImpl {}
 
 impl ParserImpl {
-    pub fn new() -> Self {
-        ParserImpl {}
-    }
-
-    fn parse_pest<'a>(prog: &'a str) -> Result<Pairs<Rule>, pest::error::Error<Rule>> {
+    fn parse_pest(prog: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule>> {
         PestProtoParser::parse(Rule::program, prog)
     }
 
@@ -39,7 +36,7 @@ impl ParserImpl {
                 Rule::option => prog.options.push(Self::parse_option(stmt)?),
                 Rule::enum_def => prog.types.push(Self::parse_enum(stmt)?),
                 Rule::message_def => prog.types.push(Self::parse_message(stmt)?),
-                err @ _ => {
+                err => {
                     return Err(format!(
                         "Unexpected rule '{:?}' found at top level of file.",
                         err
@@ -51,7 +48,7 @@ impl ParserImpl {
         Ok(prog)
     }
 
-    fn parse_enum<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
+    fn parse_enum(statement: Pair<Rule>) -> Result<ProtoType, String> {
         let mut enum_def_parts = statement.into_inner();
 
         let name = enum_def_parts.next().unwrap().as_str();
@@ -62,7 +59,7 @@ impl ParserImpl {
             match part.as_rule() {
                 Rule::option => result.options.push(Self::parse_option(part)?),
                 Rule::enum_value => result.values.push(Self::parse_enum_value(part)?),
-                err @ _ => {
+                err => {
                     return Err(format!(
                         "Unexpected rule found when parsing enum body: {:?}",
                         err
@@ -88,7 +85,7 @@ impl ParserImpl {
         })
     }
 
-    fn parse_message<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
+    fn parse_message(statement: Pair<Rule>) -> Result<ProtoType, String> {
         let mut message_def_parts = statement.into_inner();
 
         let name = message_def_parts.next().unwrap().as_str();
@@ -103,7 +100,7 @@ impl ParserImpl {
                 Rule::message_def => result.types.push(Self::parse_message(part)?),
                 Rule::enum_def => result.types.push(Self::parse_enum(part)?),
                 Rule::message_field => result.fields.push(Self::parse_message_field(part)?),
-                err @ _ => {
+                err => {
                     return Err(format!(
                         "Unexpected rule {:?} when parsing message body",
                         err
@@ -123,7 +120,7 @@ impl ParserImpl {
                 "required" => Some(ProtoMessageFieldModifier::Required),
                 "optional" => Some(ProtoMessageFieldModifier::Optional),
                 "repeated" => Some(ProtoMessageFieldModifier::Repeated),
-                modifier @ _ => return Err(format!("Unkown modifier {}", modifier)),
+                modifier => return Err(format!("Unkown modifier {}", modifier)),
             },
             _ => None,
         };
@@ -167,19 +164,17 @@ impl ParserImpl {
                                     Box::new(Self::parse_field_type(value)?),
                                 )))
                             }
-                            err @ _ => Err(format!("Unknown primitive type found while parsing field type: {:?} (expected map<T,U>)", err)) 
+                            err => Err(format!("Unknown primitive type found while parsing field type: {:?} (expected map<T,U>)", err)) 
                         },
                         None => Err("Unexpected end of input while parsing primitve field value type".to_string())
                     }
                 }
             },
             Rule::path => Ok(ProtoFieldType::IdentifierPath(type_pair.as_str().into())),
-            err @ _ => {
-                return Err(format!(
-                    "Unknown type found while parsing field type: {:?}",
-                    err
-                ));
-            }
+            err => Err(format!(
+                "Unknown type found while parsing field type: {:?}",
+                err
+            )),
         }
     }
 
@@ -193,7 +188,7 @@ impl ParserImpl {
         for next in next_pairs {
             match next.as_rule() {
                 Rule::field_option => options.push(Self::parse_field_option(next)?),
-                err @ _ => {
+                err => {
                     return Err(format!(
                         "Unknown token encountered while parsing field options: {:?}",
                         err
@@ -256,7 +251,7 @@ impl ParserImpl {
                     constant_pair.as_str().to_string()
                 )),
             },
-            err @ _ => Err(format!(
+            err => Err(format!(
                 "Unknown value type encountered while parsing constant: '{:?}'",
                 err
             )),
@@ -267,7 +262,7 @@ impl ParserImpl {
         match statement.into_inner().next().unwrap().as_str() {
             "proto2" => Ok(ProtoSyntax::Proto2),
             "proto3" => Ok(ProtoSyntax::Proto3),
-            syntax @ _ => Err(format!("Unknown proto syntax '{}'", syntax)),
+            syntax => Err(format!("Unknown proto syntax '{}'", syntax)),
         }
     }
 
@@ -281,7 +276,7 @@ impl ParserImpl {
         let modifier = match import_parts.peek().unwrap().as_rule() {
             Rule::import_modifier => match import_parts.next().unwrap().as_str() {
                 "public" => Some(ProtoImportModifier::Public),
-                err @ _ => return Err(format!("Unknown import modifier '{}'", err)),
+                err => return Err(format!("Unknown import modifier '{}'", err)),
             },
             _ => None,
         };
@@ -305,7 +300,7 @@ impl Parser for ParserImpl {
 mod tests {
     macro_rules! parse_test {
         ($test_path: expr) => {{
-            let parser = ParserImpl::new();
+            let parser = ParserImpl::default();
             parser
                 .parse(include_str!($test_path))
                 .expect(&format!("failed to parse {}", $test_path))

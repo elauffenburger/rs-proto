@@ -5,7 +5,7 @@ use crate::utils::{camel_case, CasedString};
 
 use std::rc::Rc;
 
-const BASE_ENUM_TYPE: &'static str = "ProtobufEnum";
+const BASE_ENUM_TYPE: &str = "ProtobufEnum";
 
 pub struct DartCodeGenerator {
     parser: Box<Parser>,
@@ -137,7 +137,7 @@ impl DartCodeGenerator {
 
     fn gen_enum_body<'a>(
         enum_name: &'a str,
-        enum_values: &Vec<ProtoEnumValue>,
+        enum_values: &[ProtoEnumValue],
         indent: usize,
     ) -> Result<String, String> {
         let mut result = vec![];
@@ -179,7 +179,7 @@ impl DartCodeGenerator {
 
     fn gen_all_enum_values_list<'a>(
         enum_name: &'a str,
-        enum_values: &Vec<ProtoEnumValue>,
+        enum_values: &[ProtoEnumValue],
         indent: usize,
     ) -> Result<String, String> {
         let indentation = "\t".repeat(indent as usize);
@@ -203,7 +203,7 @@ impl DartCodeGenerator {
         ))
     }
 
-    fn gen_enum_ctor<'a, 'b>(enum_name: &'a str, indent: usize) -> Result<String, String> {
+    fn gen_enum_ctor(enum_name: &str, indent: usize) -> Result<String, String> {
         let indentation = "\t".repeat(indent as usize);
         let inner_indentation = "\t".repeat(indent + 1 as usize);
 
@@ -265,7 +265,7 @@ mod tests {
 
     macro_rules! gen_code_for_test {
         ($test_path: expr) => {{
-            let parser = ParserImpl::new();
+            let parser = ParserImpl::default();
             let generator = DartCodeGenerator::new(Box::new(parser));
 
             generator

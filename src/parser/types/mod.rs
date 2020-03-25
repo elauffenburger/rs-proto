@@ -8,7 +8,7 @@ impl<'a> ProtoType<'a> {
     pub fn get_name(&self) -> &str {
         match self {
             ProtoType::Message(message) => &message.name,
-            ProtoType::Enum(enumeration) => &enumeration.name
+            ProtoType::Enum(enumeration) => &enumeration.name,
         }
     }
 }
@@ -16,18 +16,18 @@ impl<'a> ProtoType<'a> {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProtoFieldType<'a> {
     Primitive(ProtoPrimitiveType<'a>),
-    IdentifierPath(ProtoIdentifierPath<'a>)
+    IdentifierPath(ProtoIdentifierPath<'a>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProtoIdentifierPath<'a> {
-    Path(&'a str)
+    Path(&'a str),
 }
 
 impl<'a> ProtoIdentifierPath<'a> {
     pub fn get_path_parts(&self) -> Vec<&str> {
         match self {
-            ProtoIdentifierPath::Path(path) => path.split(".").collect()
+            ProtoIdentifierPath::Path(path) => path.split('.').collect(),
         }
     }
 }
@@ -44,7 +44,7 @@ pub enum ProtoPrimitiveType<'a> {
     Int64,
     Str,
     Boolean,
-    Map(Box<ProtoFieldType<'a>>, Box<ProtoFieldType<'a>>)
+    Map(Box<ProtoFieldType<'a>>, Box<ProtoFieldType<'a>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -58,7 +58,7 @@ pub struct ProtoOption {
 pub enum ProtoConstant {
     Numeric(f32),
     Str(String),
-    Boolean(bool)
+    Boolean(bool),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -128,7 +128,7 @@ pub enum ProtoSyntax {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProtoImportModifier {
-    Public
+    Public,
 }
 
 #[derive(Debug, PartialEq, Clone)]
