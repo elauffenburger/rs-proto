@@ -1,14 +1,8 @@
-use crate::parser::*;
+use crate::parser::{Program, ProtoIdentifierPath, ProtoType};
 use std::cell::RefCell;
 use std::fmt;
 use std::fmt::Debug;
 use std::rc::Rc;
-
-type QueuedOpFn = FnMut(&mut GeneratorEnvironment) -> Result<String, String>;
-
-pub enum QueuedOp {
-    QueuedOp(Box<QueuedOpFn>),
-}
 
 type IdentifierQualfifierFn = Fn(&ProtoType, Rc<RefCell<ProtoTypeHierarchyNode>>) -> String;
 
@@ -34,25 +28,19 @@ impl IdentifierQualifier {
     }
 }
 
-impl Debug for QueuedOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("<QueuedOp>")
-    }
-}
-
-pub struct ProtoTypeHierarchy {
+pub struct ProtoTypeHierarchy<'a> {
     // The head of this hierarchy.
-    pub head: Rc<RefCell<ProtoTypeHierarchyNode>>,
+    pub head: Rc<RefCell<ProtoTypeHierarchyNode<'a>>>,
 }
 
-impl Debug for ProtoTypeHierarchy {
+impl<'a> Debug for ProtoTypeHierarchy<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("<ProtoTypeHierarchy>")
     }
 }
 
-impl ProtoTypeHierarchy {
-    pub fn from_program(program: &Program, identifier_qualifier: IdentifierQualifier) -> Self {
+impl<'a> ProtoTypeHierarchy<'a> {
+    pub fn from_program(program: &'a Program, identifier_qualifier: IdentifierQualifier) -> Self {
         let head = Rc::new(RefCell::new(ProtoTypeHierarchyNode::new_head()));
 
         for proto_type in &program.types {
@@ -71,14 +59,14 @@ impl ProtoTypeHierarchy {
     pub fn find_type_node(
         &self,
         proto_type: &ProtoType,
-    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode>>> {
+    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode<'a>>>> {
         Self::find_type_node_rec(self.head.clone(), proto_type)
     }
 
     fn find_type_node_rec(
-        node: Rc<RefCell<ProtoTypeHierarchyNode>>,
+        node: Rc<RefCell<ProtoTypeHierarchyNode<'a>>>,
         proto_type: &ProtoType,
-    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode>>> {
+    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode<'a>>>> {
         if let Some(node_proto_type) = node.borrow().proto_type.clone() {
             if (*node_proto_type) == *proto_type {
                 return Some(node.clone());
@@ -96,21 +84,21 @@ impl ProtoTypeHierarchy {
     }
 }
 
-pub struct ProtoTypeHierarchyNode {
+pub struct ProtoTypeHierarchyNode<'a> {
     // The parent of this node (if this is not the root node).
-    pub parent: Option<Rc<RefCell<ProtoTypeHierarchyNode>>>,
+    pub parent: Option<Rc<RefCell<ProtoTypeHierarchyNode<'a>>>>,
 
     // The type represented by this node (if present).
-    pub proto_type: Option<Rc<ProtoType>>,
+    pub proto_type: Option<Rc<ProtoType<'a>>>,
 
     // The fully qualified name of the type (if present).
     pub fully_qualified_identifier: Option<String>,
 
     // Children of this node.
-    pub children: Vec<Rc<RefCell<ProtoTypeHierarchyNode>>>,
+    pub children: Vec<Rc<RefCell<ProtoTypeHierarchyNode<'a>>>>,
 }
 
-impl Debug for ProtoTypeHierarchyNode {
+impl<'a> Debug for ProtoTypeHierarchyNode<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let parent = match &self.parent {
             Some(parent) => match parent.borrow().proto_type.clone() {
@@ -133,7 +121,7 @@ impl Debug for ProtoTypeHierarchyNode {
     }
 }
 
-impl ProtoTypeHierarchyNode {
+impl<'a> ProtoTypeHierarchyNode<'a> {
     pub fn new_head() -> Self {
         ProtoTypeHierarchyNode {
             parent: None,
@@ -144,8 +132,8 @@ impl ProtoTypeHierarchyNode {
     }
 
     pub fn new(
-        parent: Rc<RefCell<ProtoTypeHierarchyNode>>,
-        proto_type: Rc<ProtoType>,
+        parent: Rc<RefCell<ProtoTypeHierarchyNode<'a>>>,
+        proto_type: Rc<ProtoType<'a>>,
         identifier_qualifier: &IdentifierQualifier,
     ) -> Rc<RefCell<Self>> {
         let fully_qualified_identifier = identifier_qualifier.invoke(&proto_type, parent.clone());
@@ -177,28 +165,32 @@ impl ProtoTypeHierarchyNode {
 }
 
 #[derive(Debug)]
-pub struct GeneratorEnvironment<'hierarchy> {
+pub struct GeneratorEnvironment<'a> {
+    // The Program this hierarchy is based off of.
+    program: &'a Program<'a>,
+
     // Hierarchy of known proto types.
-    type_hierarchy: &'hierarchy ProtoTypeHierarchy,
+    type_hierarchy: Rc<ProtoTypeHierarchy<'a>>,
 
     // The type we're evaluating operations in the context of.
-    type_context: Rc<RefCell<ProtoTypeHierarchyNode>>,
+    type_context: Rc<RefCell<ProtoTypeHierarchyNode<'a>>>,
 
-    // Operations that should be performed when an environment fully unwinds.
-    queued_ops: Vec<QueuedOp>,
+    // Outputs that should be appended when an environment fully unwinds.
+    queued_outputs: Vec<String>,
 
     // Children of this environment.
-    children: Vec<Rc<RefCell<GeneratorEnvironment<'hierarchy>>>>,
+    children: Vec<Rc<RefCell<GeneratorEnvironment<'a>>>>,
 }
 
-impl<'h> GeneratorEnvironment<'h> {
-    pub fn new(type_hierarchy: &'h ProtoTypeHierarchy) -> Self {
-        let type_context = type_hierarchy.head.clone();
+impl<'a> GeneratorEnvironment<'a> {
+    pub fn new(program: &'a Program, type_hierarchy: Rc<ProtoTypeHierarchy<'a>>) -> Self {
+        let type_context = type_hierarchy.clone().head.clone();
 
         GeneratorEnvironment {
+            program,
             type_hierarchy,
             type_context,
-            queued_ops: vec![],
+            queued_outputs: vec![],
             children: vec![],
         }
     }
@@ -209,14 +201,15 @@ impl<'h> GeneratorEnvironment<'h> {
             Some(type_context) => type_context,
             None => panic!(
                 "Failed to find type '{:?}' in hierarchy: {:?}",
-                proto_type, type_hierarchy
+                proto_type, self.type_hierarchy
             ),
         };
 
         let child = Rc::new(RefCell::new(GeneratorEnvironment {
+            program: self.program,
             type_hierarchy,
             type_context,
-            queued_ops: vec![],
+            queued_outputs: vec![],
             children: vec![],
         }));
 
@@ -235,31 +228,14 @@ impl<'h> GeneratorEnvironment<'h> {
     pub fn resolve_proto_type(
         &self,
         path: &ProtoIdentifierPath,
-    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode>>> {
-        println!("deriving path for {:?}", path);
-
+    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode<'a>>>> {
         path.get_path_parts()
             .iter()
             .fold(None, |acc, identifier| match acc {
                 None => {
                     let starting_context = &self.type_context;
-                    println!(
-                        "starting context: {:?}",
-                        starting_context
-                            .clone()
-                            .borrow()
-                            .fully_qualified_identifier
-                            .clone()
-                    );
-
                     let derived_context =
                         Self::resolve_proto_type_relative_to_context(identifier, starting_context);
-                    println!(
-                        "derived_context: {:?}",
-                        derived_context
-                            .clone()
-                            .map(|node| node.borrow().fully_qualified_identifier.clone())
-                    );
 
                     Some(derived_context)
                 }
@@ -268,12 +244,6 @@ impl<'h> GeneratorEnvironment<'h> {
                     Some(context) => {
                         let derived_context =
                             Self::resolve_proto_type_relative_to_context(identifier, &context);
-                        println!(
-                            "derived_context: {:?}",
-                            derived_context
-                                .clone()
-                                .map(|node| node.borrow().fully_qualified_identifier.clone())
-                        );
 
                         Some(derived_context)
                     }
@@ -284,8 +254,8 @@ impl<'h> GeneratorEnvironment<'h> {
 
     fn resolve_proto_type_relative_to_context(
         identifier: &str,
-        type_context: &Rc<RefCell<ProtoTypeHierarchyNode>>,
-    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode>>> {
+        type_context: &Rc<RefCell<ProtoTypeHierarchyNode<'a>>>,
+    ) -> Option<Rc<RefCell<ProtoTypeHierarchyNode<'a>>>> {
         let mut curr = Some(type_context.clone());
 
         loop {
@@ -327,29 +297,22 @@ impl<'h> GeneratorEnvironment<'h> {
         identifier.to_string()
     }
 
-    pub fn queue_op(&mut self, op: QueuedOp) {
-        self.queued_ops.push(op);
+    pub fn queue_output(&mut self, output: String) {
+        self.queued_outputs.push(output);
     }
 
-    pub fn flush_queued_ops(&mut self) -> Result<Vec<String>, String> {
-        let mut results = vec![];
-
-        while let Some(op) = self.queued_ops.pop() {
-            match op {
-                QueuedOp::QueuedOp(mut op) => results.push(op(self)?),
-            }
-        }
-
-        Ok(results)
+    pub fn flush_queued_outputs(&mut self) -> Vec<String> {
+        self.queued_outputs.drain(0..).collect()
     }
 
-    pub fn flush_queued_ops_deep(&mut self) -> Result<Vec<String>, String> {
-        let mut results = self.flush_queued_ops()?;
-
-        for child in &self.children {
-            results.extend(child.borrow_mut().flush_queued_ops_deep()?);
-        }
-
-        Ok(results)
+    pub fn flush_queued_outputs_deep(&mut self) -> Vec<String> {
+        self.flush_queued_outputs()
+            .into_iter()
+            .chain(
+                self.children
+                    .iter()
+                    .flat_map(|child| child.borrow_mut().flush_queued_outputs_deep()),
+            )
+            .collect()
     }
 }

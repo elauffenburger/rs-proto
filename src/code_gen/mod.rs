@@ -9,7 +9,7 @@ pub enum Language {
 }
 
 pub trait CodeGenerator {
-    fn gen_code<'a>(&self, src: &'a str) -> Result<String, String>;
+    fn gen_code(&self, src: String) -> Result<String, String>;
 }
 
 pub fn generator_for(parser: Box<Parser>, language: Language) -> impl CodeGenerator {

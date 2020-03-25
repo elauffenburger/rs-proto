@@ -9,7 +9,7 @@ pub use types::*;
 struct PestProtoParser;
 
 pub trait Parser {
-    fn parse<'a>(&self, input: &'a str) -> Result<Program, String>;
+    fn parse<'a>(&self, input: &'a str) -> Result<Program<'a>, String>;
 }
 
 pub fn new_parser() -> impl Parser {
@@ -27,8 +27,8 @@ impl ParserImpl {
         PestProtoParser::parse(Rule::program, prog)
     }
 
-    fn do_parse(parse_root: &mut Pairs<Rule>) -> Result<Program, String> {
-        let mut prog = Program::new();
+    fn do_parse<'a>(src: &'a str, mut parse_root: Pairs<'a, Rule>) -> Result<Program<'a>, String> {
+        let mut prog = Program::new(src);
 
         let top_level_stmts = parse_root.next().unwrap().into_inner();
         for stmt in top_level_stmts {
@@ -54,7 +54,7 @@ impl ParserImpl {
     fn parse_enum<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
         let mut enum_def_parts = statement.into_inner();
 
-        let name = enum_def_parts.next().unwrap().as_str().to_string();
+        let name = enum_def_parts.next().unwrap().as_str();
         let mut result = ProtoEnum::new(name);
 
         let body_parts = enum_def_parts.next().unwrap().into_inner();
@@ -91,7 +91,7 @@ impl ParserImpl {
     fn parse_message<'a>(statement: Pair<'a, Rule>) -> Result<ProtoType, String> {
         let mut message_def_parts = statement.into_inner();
 
-        let name = message_def_parts.next().unwrap().as_str().to_string();
+        let name = message_def_parts.next().unwrap().as_str();
         let mut result = ProtoMessage::new(name);
 
         let body = message_def_parts.next().unwrap();
@@ -129,7 +129,7 @@ impl ParserImpl {
         };
 
         let field_type = Self::parse_field_type(field_parts.next().unwrap())?;
-        let name = field_parts.next().unwrap().as_str().to_string();
+        let name = field_parts.next().unwrap().as_str();
         let position = field_parts.next().unwrap().as_str().parse::<u32>().unwrap();
 
         let options = match Self::parse_field_options(&mut field_parts) {
@@ -173,9 +173,7 @@ impl ParserImpl {
                     }
                 }
             },
-            Rule::path => Ok(ProtoFieldType::IdentifierPath(
-                type_pair.as_str().to_string().into(),
-            )),
+            Rule::path => Ok(ProtoFieldType::IdentifierPath(type_pair.as_str().into())),
             err @ _ => {
                 return Err(format!(
                     "Unknown type found while parsing field type: {:?}",
@@ -273,8 +271,8 @@ impl ParserImpl {
         }
     }
 
-    fn parse_package(statement: Pair<Rule>) -> Result<String, String> {
-        Ok(statement.into_inner().next().unwrap().as_str().to_string())
+    fn parse_package(statement: Pair<Rule>) -> Result<&str, String> {
+        Ok(statement.into_inner().next().unwrap().as_str())
     }
 
     fn parse_import(statement: Pair<Rule>) -> Result<ProtoImport, String> {
@@ -295,10 +293,10 @@ impl ParserImpl {
 }
 
 impl Parser for ParserImpl {
-    fn parse<'a>(&self, input: &'a str) -> Result<Program, String> {
+    fn parse<'a>(&self, input: &'a str) -> Result<Program<'a>, String> {
         match Self::parse_pest(input) {
             Err(err) => Err(format!("{}", err)),
-            Ok(mut parse_root) => Self::do_parse(&mut parse_root),
+            Ok(parse_root) => Self::do_parse(input, parse_root),
         }
     }
 }
@@ -323,6 +321,7 @@ mod tests {
         assert_eq!(
             program,
             Program {
+                src: program.src,
                 syntax: Some(ProtoSyntax::Proto3),
                 imports: vec![ProtoImport {
                     path: "other.proto".to_string(),
@@ -336,7 +335,7 @@ mod tests {
                 }],
                 types: vec![
                     ProtoType::Enum(ProtoEnum {
-                        name: "EnumAllowingAlias".to_string(),
+                        name: "EnumAllowingAlias",
                         options: vec![ProtoOption {
                             name: "allow_alias".to_string(),
                             field_path: None,
@@ -365,18 +364,18 @@ mod tests {
                         ]
                     }),
                     ProtoType::Message(ProtoMessage {
-                        name: "outer".to_string(),
+                        name: "outer",
                         options: vec![ProtoOption {
                             name: "my_option".to_string(),
                             field_path: Some("a".to_string()),
                             value: ProtoConstant::Boolean(true)
                         }],
                         types: vec![ProtoType::Message(ProtoMessage {
-                            name: "inner".to_string(),
+                            name: "inner",
                             options: vec![],
                             types: vec![],
                             fields: vec![ProtoMessageField {
-                                name: "ival".to_string(),
+                                name: "ival",
                                 modifier: None,
                                 field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Int64),
                                 options: vec![],
@@ -385,25 +384,23 @@ mod tests {
                         })],
                         fields: vec![
                             ProtoMessageField {
-                                name: "inner_message".to_string(),
-                                field_type: ProtoFieldType::IdentifierPath(
-                                    "inner".to_string().into()
-                                ),
+                                name: "inner_message",
+                                field_type: ProtoFieldType::IdentifierPath("inner".into()),
                                 modifier: Some(ProtoMessageFieldModifier::Repeated),
                                 options: vec![],
                                 position: 2
                             },
                             ProtoMessageField {
-                                name: "enum_field".to_string(),
+                                name: "enum_field",
                                 field_type: ProtoFieldType::IdentifierPath(
-                                    "EnumAllowingAlias".to_string().into()
+                                    "EnumAllowingAlias".into()
                                 ),
                                 modifier: None,
                                 options: vec![],
                                 position: 3
                             },
                             ProtoMessageField {
-                                name: "my_map".to_string(),
+                                name: "my_map",
                                 field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Map(
                                     Box::new(ProtoFieldType::Primitive(ProtoPrimitiveType::Int32)),
                                     Box::new(ProtoFieldType::Primitive(ProtoPrimitiveType::Str))
@@ -426,8 +423,9 @@ mod tests {
         assert_eq!(
             program,
             Program {
+                src: program.src,
                 syntax: Some(ProtoSyntax::Proto3),
-                package: Some("foo.bar.baz".to_string()),
+                package: Some("foo.bar.baz"),
                 imports: vec![],
                 options: vec![ProtoOption {
                     name: "java_package".to_string(),
@@ -447,32 +445,33 @@ mod tests {
         assert_eq!(
             program,
             Program {
+                src: program.src,
                 syntax: None,
                 package: None,
                 imports: vec![],
                 options: vec![],
                 types: vec![ProtoType::Message(ProtoMessage {
-                    name: "Person".to_string(),
+                    name: "Person",
                     options: vec![],
                     types: vec![],
                     fields: vec![
                         ProtoMessageField {
                             field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Str),
-                            name: "first_name".to_string(),
+                            name: "first_name",
                             modifier: None,
                             options: vec![],
                             position: 1
                         },
                         ProtoMessageField {
                             field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Str),
-                            name: "last_name".to_string(),
+                            name: "last_name",
                             modifier: None,
                             options: vec![],
                             position: 2
                         },
                         ProtoMessageField {
                             field_type: ProtoFieldType::Primitive(ProtoPrimitiveType::Int64),
-                            name: "date_of_birth_unix_epoch".to_string(),
+                            name: "date_of_birth_unix_epoch",
                             modifier: None,
                             options: vec![],
                             position: 3
@@ -491,12 +490,13 @@ mod tests {
         assert_eq!(
             program,
             Program {
+                src: program.src,
                 syntax: None,
                 package: None,
                 imports: vec![],
                 options: vec![],
                 types: vec![ProtoType::Enum(ProtoEnum {
-                    name: "RelationshipType".to_string(),
+                    name: "RelationshipType",
                     options: vec![],
                     values: vec![
                         ProtoEnumValue {

@@ -3,6 +3,8 @@ use crate::code_gen::env::*;
 use crate::parser::*;
 use crate::utils::{camel_case, CasedString};
 
+use std::rc::Rc;
+
 const BASE_ENUM_TYPE: &'static str = "ProtobufEnum";
 
 pub struct DartCodeGenerator {
@@ -14,10 +16,7 @@ impl DartCodeGenerator {
         DartCodeGenerator { parser }
     }
 
-    fn gen_type<'a>(
-        proto_type: &ProtoType,
-        env: &'a mut GeneratorEnvironment,
-    ) -> Result<String, String> {
+    fn gen_type(proto_type: &ProtoType, env: &mut GeneratorEnvironment) -> Result<String, String> {
         match proto_type {
             ProtoType::Enum(enumeration) => Self::gen_enum(&enumeration, env, 0),
             ProtoType::Message(message) => Self::gen_message(&message, env, 0),
@@ -53,13 +52,15 @@ impl DartCodeGenerator {
         // Queue up message ops to be written after we finish unrolling the environment.
         for proto_type in &message.types {
             let child_env = env.new_child(proto_type);
-            let proto_type = proto_type.clone();
 
-            child_env
-                .borrow_mut()
-                .queue_op(QueuedOp::QueuedOp(Box::new(move |env| {
-                    Ok(format!("\n\n{}", Self::gen_type(&proto_type, env)?))
-                })));
+            let proto_type_output = {
+                format!(
+                    "\n\n{}",
+                    Self::gen_type(proto_type, &mut child_env.borrow_mut())?
+                )
+            };
+
+            child_env.borrow_mut().queue_output(proto_type_output);
         }
 
         Ok(result.join(""))
@@ -158,7 +159,7 @@ impl DartCodeGenerator {
         Ok(result.join(""))
     }
 
-    fn gen_enum_value<'a, 'b>(
+    fn gen_enum_value<'a>(
         enum_name: &'a str,
         value: &ProtoEnumValue,
         indent: usize,
@@ -176,7 +177,7 @@ impl DartCodeGenerator {
         ))
     }
 
-    fn gen_all_enum_values_list<'a, 'b>(
+    fn gen_all_enum_values_list<'a>(
         enum_name: &'a str,
         enum_values: &Vec<ProtoEnumValue>,
         indent: usize,
@@ -223,10 +224,10 @@ impl DartCodeGenerator {
 }
 
 impl CodeGenerator for DartCodeGenerator {
-    fn gen_code<'a>(&self, src: &'a str) -> Result<String, String> {
+    fn gen_code(&self, src: String) -> Result<String, String> {
         let mut result = vec![];
 
-        let prog = self.parser.parse(src)?;
+        let prog = self.parser.parse(&src)?;
 
         let type_hierarchy = ProtoTypeHierarchy::from_program(
             &prog,
@@ -240,7 +241,7 @@ impl CodeGenerator for DartCodeGenerator {
             })),
         );
 
-        let mut env = GeneratorEnvironment::new(&type_hierarchy);
+        let mut env = GeneratorEnvironment::new(&prog, Rc::new(type_hierarchy));
 
         // Generate all the top-level types.
         for proto_type in &prog.types {
@@ -251,7 +252,7 @@ impl CodeGenerator for DartCodeGenerator {
         }
 
         // Generate any types that were queued up while generating top-level types.
-        result.extend(env.flush_queued_ops_deep()?);
+        result.extend(env.flush_queued_outputs_deep());
 
         Ok(result.join(""))
     }
@@ -268,7 +269,7 @@ mod tests {
             let generator = DartCodeGenerator::new(Box::new(parser));
 
             generator
-                .gen_code(include_str!($test_path))
+                .gen_code(include_str!($test_path).to_string())
                 .expect("unsuccessful codegen")
                 .to_owned()
         }};

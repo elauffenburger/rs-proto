@@ -1,10 +1,10 @@
 #[derive(Debug, PartialEq, Clone)]
-pub enum ProtoType {
-    Message(ProtoMessage),
-    Enum(ProtoEnum),
+pub enum ProtoType<'a> {
+    Message(ProtoMessage<'a>),
+    Enum(ProtoEnum<'a>),
 }
 
-impl ProtoType {
+impl<'a> ProtoType<'a> {
     pub fn get_name(&self) -> &str {
         match self {
             ProtoType::Message(message) => &message.name,
@@ -14,17 +14,17 @@ impl ProtoType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ProtoFieldType {
-    Primitive(ProtoPrimitiveType),
-    IdentifierPath(ProtoIdentifierPath)
+pub enum ProtoFieldType<'a> {
+    Primitive(ProtoPrimitiveType<'a>),
+    IdentifierPath(ProtoIdentifierPath<'a>)
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ProtoIdentifierPath {
-    Path(String)
+pub enum ProtoIdentifierPath<'a> {
+    Path(&'a str)
 }
 
-impl ProtoIdentifierPath {
+impl<'a> ProtoIdentifierPath<'a> {
     pub fn get_path_parts(&self) -> Vec<&str> {
         match self {
             ProtoIdentifierPath::Path(path) => path.split(".").collect()
@@ -32,19 +32,19 @@ impl ProtoIdentifierPath {
     }
 }
 
-impl From<String> for ProtoIdentifierPath {
-    fn from(string: String) -> Self {
+impl<'a> From<&'a str> for ProtoIdentifierPath<'a> {
+    fn from(string: &'a str) -> Self {
         ProtoIdentifierPath::Path(string)
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ProtoPrimitiveType {
+pub enum ProtoPrimitiveType<'a> {
     Int32,
     Int64,
     Str,
     Boolean,
-    Map(Box<ProtoFieldType>, Box<ProtoFieldType>)
+    Map(Box<ProtoFieldType<'a>>, Box<ProtoFieldType<'a>>)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -62,15 +62,15 @@ pub enum ProtoConstant {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ProtoMessage {
-    pub name: String,
+pub struct ProtoMessage<'a> {
+    pub name: &'a str,
     pub options: Vec<ProtoOption>,
-    pub types: Vec<ProtoType>,
-    pub fields: Vec<ProtoMessageField>,
+    pub types: Vec<ProtoType<'a>>,
+    pub fields: Vec<ProtoMessageField<'a>>,
 }
 
-impl<'a> ProtoMessage {
-    pub fn new(name: String) -> Self {
+impl<'a> ProtoMessage<'a> {
+    pub fn new(name: &'a str) -> Self {
         ProtoMessage {
             name,
             options: vec![],
@@ -88,23 +88,23 @@ pub enum ProtoMessageFieldModifier {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ProtoMessageField {
+pub struct ProtoMessageField<'a> {
     pub modifier: Option<ProtoMessageFieldModifier>,
-    pub field_type: ProtoFieldType,
-    pub name: String,
+    pub field_type: ProtoFieldType<'a>,
+    pub name: &'a str,
     pub options: Vec<ProtoOption>,
     pub position: u32,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ProtoEnum {
-    pub name: String,
+pub struct ProtoEnum<'a> {
+    pub name: &'a str,
     pub options: Vec<ProtoOption>,
     pub values: Vec<ProtoEnumValue>,
 }
 
-impl ProtoEnum {
-    pub fn new(name: String) -> Self {
+impl<'a> ProtoEnum<'a> {
+    pub fn new(name: &'a str) -> Self {
         ProtoEnum {
             name,
             options: vec![],
@@ -138,17 +138,19 @@ pub struct ProtoImport {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Program {
+pub struct Program<'a> {
+    pub src: &'a str,
     pub syntax: Option<ProtoSyntax>,
-    pub package: Option<String>,
+    pub package: Option<&'a str>,
     pub imports: Vec<ProtoImport>,
     pub options: Vec<ProtoOption>,
-    pub types: Vec<ProtoType>,
+    pub types: Vec<ProtoType<'a>>,
 }
 
-impl Program {
-    pub fn new() -> Program {
+impl<'a> Program<'a> {
+    pub fn new(src: &'a str) -> Program {
         Program {
+            src,
             syntax: None,
             package: None,
             imports: vec![],
